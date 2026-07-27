@@ -1,0 +1,2887 @@
+---
+title: "Análisis de correspondencias múltiples objetivo–subjetivo"
+subtitle: "Posiciones económicas, experiencias de inseguridad y configuraciones sociales"
+author: "Gonzalo Torres"
+date: today
+lang: es
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-fold: true
+    code-summary: "Mostrar código"
+    code-tools: true
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+  freeze: auto
+---
+
+# Propósito
+
+Este documento construye un análisis de correspondencias múltiples orientado a representar conjuntamente dimensiones objetivas y subjetivas de la seguridad económica.
+
+El espacio del ACM se construye mediante seis variables activas.
+
+Variables objetivas:
+
+- posición de ingreso;
+- nivel educacional;
+- tenencia de vivienda.
+
+Variables subjetivas:
+
+- dificultad para llegar a fin de mes;
+- fragilidad ante una pérdida de ingresos;
+- desprotección financiera frente a problemas de salud.
+
+Las posiciones sociales se incorporan posteriormente sin intervenir en la construcción de los ejes. Se examinan:
+
+- grupos combinados de género y edad;
+- género y estructura parental entre hogares con menores;
+- condición de actividad;
+- presencia de deuda;
+- disponibilidad de apoyo monetario;
+- disminución reciente de ingresos.
+
+El objetivo no es reducir todas las desigualdades a una única escala, sino examinar:
+
+- convergencias entre posición objetiva y experiencia subjetiva;
+- desacoples entre recursos y percepciones de seguridad;
+- configuraciones sociales asociadas con distintas zonas del espacio.
+
+# Configuración del entorno
+
+## Paquetes
+
+```{r}
+paquetes_necesarios <- c(
+  "dplyr",
+  "tidyr",
+  "purrr",
+  "stringr",
+  "forcats",
+  "tibble",
+  "readr",
+  "openxlsx",
+  "here",
+  "knitr",
+  "ggplot2",
+  "ggrepel",
+  "FactoMineR",
+  "scales"
+)
+
+options(
+  repos = c(
+    CRAN = "https://cloud.r-project.org"
+  ),
+  dplyr.summarise.inform = FALSE,
+  scipen = 999
+)
+
+paquetes_faltantes <- paquetes_necesarios[
+  !paquetes_necesarios %in%
+    rownames(
+      installed.packages()
+    )
+]
+
+if (length(paquetes_faltantes) > 0) {
+
+  install.packages(
+    paquetes_faltantes,
+    repos = "https://cloud.r-project.org"
+  )
+}
+
+invisible(
+  lapply(
+    paquetes_necesarios,
+    library,
+    character.only = TRUE
+  )
+)
+```
+
+## Carpetas del proyecto
+
+```{r}
+ruta_datos_derivados <- here::here(
+  "Datos",
+  "EBS",
+  "derivados"
+)
+
+ruta_salidas <- here::here(
+  "outputs",
+  "05_acm_objetivo_subjetivo"
+)
+
+ruta_tablas <- file.path(
+  ruta_salidas,
+  "tablas"
+)
+
+ruta_figuras <- file.path(
+  ruta_salidas,
+  "figuras"
+)
+
+ruta_objetos <- file.path(
+  ruta_salidas,
+  "objetos"
+)
+
+dir.create(
+  ruta_tablas,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+dir.create(
+  ruta_figuras,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+dir.create(
+  ruta_objetos,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+cat(
+  "Directorio del proyecto:",
+  normalizePath(
+    here::here(),
+    winslash = "/",
+    mustWork = FALSE
+  ),
+  "\n"
+)
+```
+
+# Carga de la base analítica
+
+## Archivo requerido
+
+```{r}
+archivo_base <- file.path(
+  ruta_datos_derivados,
+  "01_ebs_vida_laboral_genero.rds"
+)
+
+if (!file.exists(archivo_base)) {
+
+  stop(
+    paste0(
+      "No se encontró la base derivada:\n",
+      archivo_base,
+      "\n\nRenderice primero analisis/01_preparacion_base.qmd."
+    )
+  )
+}
+```
+
+```{r}
+base_origen <- readRDS(
+  archivo_base
+)
+
+cat(
+  "Casos en la base de origen:",
+  nrow(
+    base_origen
+  ),
+  "\n"
+)
+
+cat(
+  "Variables en la base de origen:",
+  ncol(
+    base_origen
+  ),
+  "\n"
+)
+```
+
+# Verificación de variables
+
+## Variables activas
+
+```{r}
+variables_objetivas <- c(
+  "posicion_ingreso_3",
+  "nivel_educacional_3",
+  "tenencia_vivienda_3"
+)
+
+variables_subjetivas <- c(
+  "inseguridad_fin_mes",
+  "inseguridad_reservas",
+  "inseguridad_salud"
+)
+
+variables_activas <- c(
+  variables_objetivas,
+  variables_subjetivas
+)
+```
+
+## Variables complementarias
+
+```{r}
+variables_complementarias <- c(
+  "grupo_sexo_edad",
+  "grupo_genero_estructura_menores",
+  "grupo_genero_tipo_hogar_menores",
+  "condicion_actividad",
+  "presencia_deuda",
+  "inseguridad_apoyo",
+  "disminucion_ingreso"
+)
+```
+
+## Variables técnicas
+
+```{r}
+variables_tecnicas <- c(
+  "identificador_persona",
+  "ponderador",
+  "genero",
+  "tramo_edad",
+  "presencia_menores_18",
+  "quintil_ingreso_etiqueta",
+  "educacion_etiqueta",
+  "tenencia_vivienda_etiqueta"
+)
+```
+
+```{r}
+variables_requeridas <- unique(
+  c(
+    variables_activas,
+    variables_complementarias,
+    variables_tecnicas
+  )
+)
+
+variables_faltantes <- setdiff(
+  variables_requeridas,
+  names(
+    base_origen
+  )
+)
+
+if (length(variables_faltantes) > 0) {
+
+  stop(
+    paste0(
+      "Faltan variables necesarias para el ACM:\n",
+      paste(
+        variables_faltantes,
+        collapse = ", "
+      )
+    )
+  )
+}
+```
+
+# Preparación de las modalidades activas
+
+## Función para crear factores binarios
+
+```{r}
+crear_factor_binario <- function(
+    x,
+    etiqueta_favorable,
+    etiqueta_desfavorable
+) {
+
+  salida <- dplyr::case_when(
+    x == 0 ~ etiqueta_favorable,
+    x == 1 ~ etiqueta_desfavorable,
+    TRUE ~ NA_character_
+  )
+
+  factor(
+    salida,
+    levels = c(
+      etiqueta_favorable,
+      etiqueta_desfavorable
+    )
+  )
+}
+
+normalizar_texto <- function(
+    x
+) {
+
+  x |>
+    as.character() |>
+    stringr::str_to_lower() |>
+    stringr::str_replace_all(
+      "[áàäâ]",
+      "a"
+    ) |>
+    stringr::str_replace_all(
+      "[éèëê]",
+      "e"
+    ) |>
+    stringr::str_replace_all(
+      "[íìïî]",
+      "i"
+    ) |>
+    stringr::str_replace_all(
+      "[óòöô]",
+      "o"
+    ) |>
+    stringr::str_replace_all(
+      "[úùüû]",
+      "u"
+    ) |>
+    stringr::str_replace_all(
+      "ñ",
+      "n"
+    ) |>
+    stringr::str_squish()
+}
+```
+
+## Construcción de la base para el ACM
+
+```{r}
+base_preparada <- base_origen |>
+  dplyr::mutate(
+    quintil_texto = normalizar_texto(
+      quintil_ingreso_etiqueta
+    ),
+
+    educacion_texto = normalizar_texto(
+      educacion_etiqueta
+    ),
+
+    tenencia_texto = normalizar_texto(
+      tenencia_vivienda_etiqueta
+    )
+  ) |>
+  dplyr::transmute(
+    identificador_persona = as.character(
+      identificador_persona
+    ),
+
+    ponderador = as.numeric(
+      ponderador
+    ),
+
+    posicion_ingreso = dplyr::case_when(
+      stringr::str_detect(
+        quintil_texto,
+        "quintil\\s*(iv|v)\\b|(iv|v)\\s*quintil|cuarto|quinto|^4\\.?|^5\\.?"
+      ) ~ "Ingresos altos",
+
+      stringr::str_detect(
+        quintil_texto,
+        "quintil\\s*iii\\b|iii\\s*quintil|tercer|^3\\.?"
+      ) ~ "Ingresos medios",
+
+      stringr::str_detect(
+        quintil_texto,
+        "quintil\\s*(i|ii)\\b|(i|ii)\\s*quintil|primer|segundo|^1\\.?|^2\\.?"
+      ) ~ "Ingresos bajos",
+
+      TRUE ~ NA_character_
+    ),
+
+    posicion_ingreso = factor(
+      posicion_ingreso,
+      levels = c(
+        "Ingresos bajos",
+        "Ingresos medios",
+        "Ingresos altos"
+      )
+    ),
+
+    nivel_educacional = dplyr::case_when(
+      stringr::str_detect(
+        educacion_texto,
+        "superior"
+      ) ~ "Educación superior",
+
+      stringr::str_detect(
+        educacion_texto,
+        "media"
+      ) ~ "Educación media",
+
+      stringr::str_detect(
+        educacion_texto,
+        "basica|sin educacion|ningun nivel"
+      ) ~ "Educación básica",
+
+      TRUE ~ NA_character_
+    ),
+
+    nivel_educacional = factor(
+      nivel_educacional,
+      levels = c(
+        "Educación básica",
+        "Educación media",
+        "Educación superior"
+      )
+    ),
+
+    tenencia_vivienda = dplyr::case_when(
+      stringr::str_detect(
+        tenencia_texto,
+        "propia"
+      ) ~ "Vivienda propia",
+
+      stringr::str_detect(
+        tenencia_texto,
+        "arrend"
+      ) ~ "Vivienda arrendada",
+
+      stringr::str_detect(
+        tenencia_texto,
+        "cedida|poseedor|ocupante|usufructo|otra"
+      ) ~ "Vivienda cedida u otra",
+
+      TRUE ~ NA_character_
+    ),
+
+    tenencia_vivienda = factor(
+      tenencia_vivienda,
+      levels = c(
+        "Vivienda propia",
+        "Vivienda arrendada",
+        "Vivienda cedida u otra"
+      )
+    ),
+
+    fin_de_mes = crear_factor_binario(
+      inseguridad_fin_mes,
+      etiqueta_favorable =
+        "Facilidad para llegar a fin de mes",
+      etiqueta_desfavorable =
+        "Dificultad para llegar a fin de mes"
+    ),
+
+    fragilidad_ingresos = crear_factor_binario(
+      inseguridad_reservas,
+      etiqueta_favorable =
+        "Menor fragilidad ante pérdida de ingresos",
+      etiqueta_desfavorable =
+        "Fragilidad intensa ante pérdida de ingresos"
+    ),
+
+    proteccion_salud = crear_factor_binario(
+      inseguridad_salud,
+      etiqueta_favorable =
+        "Protección financiera en salud",
+      etiqueta_desfavorable =
+        "Desprotección financiera en salud"
+    ),
+
+    grupo_sexo_edad = factor(
+      as.character(
+        grupo_sexo_edad
+      ),
+      levels = c(
+        "Mujeres · 18–29",
+        "Hombres · 18–29",
+        "Mujeres · 30–44",
+        "Hombres · 30–44",
+        "Mujeres · 45–59",
+        "Hombres · 45–59"
+      )
+    ),
+
+    grupo_genero_estructura_menores = factor(
+      as.character(
+        grupo_genero_estructura_menores
+      ),
+      levels = c(
+        "Mujeres · hogar biparental",
+        "Mujeres · hogar monoparental",
+        "Hombres · hogar biparental",
+        "Hombres · hogar monoparental"
+      )
+    ),
+
+    grupo_genero_tipo_hogar_menores = factor(
+      as.character(
+        grupo_genero_tipo_hogar_menores
+      )
+    ),
+
+    condicion_actividad = factor(
+      as.character(
+        condicion_actividad
+      ),
+      levels = c(
+        "Ocupada/o",
+        "Desocupada/o",
+        "Fuera de la fuerza de trabajo"
+      )
+    ),
+
+    deuda = dplyr::case_when(
+      presencia_deuda == 0L ~ "Sin deuda",
+      presencia_deuda == 1L ~ "Con deuda",
+      TRUE ~ NA_character_
+    ),
+
+    deuda = factor(
+      deuda,
+      levels = c(
+        "Sin deuda",
+        "Con deuda"
+      )
+    ),
+
+    apoyo_monetario = dplyr::case_when(
+      inseguridad_apoyo == 0L ~
+        "Cuenta con apoyo monetario",
+
+      inseguridad_apoyo == 1L ~
+        "Sin apoyo monetario",
+
+      TRUE ~ NA_character_
+    ),
+
+    apoyo_monetario = factor(
+      apoyo_monetario,
+      levels = c(
+        "Cuenta con apoyo monetario",
+        "Sin apoyo monetario"
+      )
+    ),
+
+    cambio_ingreso = dplyr::case_when(
+      disminucion_ingreso == 0L ~
+        "Ingreso estable o aumentado",
+
+      disminucion_ingreso == 1L ~
+        "Ingreso disminuyó",
+
+      TRUE ~ NA_character_
+    ),
+
+    cambio_ingreso = factor(
+      cambio_ingreso,
+      levels = c(
+        "Ingreso estable o aumentado",
+        "Ingreso disminuyó"
+      )
+    ),
+
+    genero = factor(
+      as.character(
+        genero
+      ),
+      levels = c(
+        "Mujeres",
+        "Hombres"
+      )
+    ),
+
+    tramo_edad = factor(
+      as.character(
+        tramo_edad
+      ),
+      levels = c(
+        "18 a 29 años",
+        "30 a 44 años",
+        "45 a 59 años"
+      )
+    ),
+
+    presencia_menores_18 =
+      presencia_menores_18
+  )
+```
+
+## Nombres finales de variables activas
+
+```{r}
+variables_activas_acm <- c(
+  "posicion_ingreso",
+  "nivel_educacional",
+  "tenencia_vivienda",
+  "fin_de_mes",
+  "fragilidad_ingresos",
+  "proteccion_salud"
+)
+```
+
+# Auditoría de cobertura
+
+## Función de cobertura
+
+```{r}
+resumir_cobertura <- function(
+    datos,
+    variables
+) {
+
+  purrr::map_dfr(
+    variables,
+    function(
+        variable
+    ) {
+
+      n_total <- nrow(
+        datos
+      )
+
+      n_valido <- sum(
+        !is.na(
+          datos[[variable]]
+        )
+      )
+
+      tibble::tibble(
+        variable = variable,
+        n_total = n_total,
+        n_valido = n_valido,
+        porcentaje_valido = 100 *
+          n_valido /
+          n_total
+      )
+    }
+  )
+}
+```
+
+```{r}
+tabla_cobertura_activas <- resumir_cobertura(
+  base_preparada,
+  variables_activas_acm
+)
+
+knitr::kable(
+  tabla_cobertura_activas |>
+    dplyr::mutate(
+      porcentaje_valido = round(
+        porcentaje_valido,
+        1
+      )
+    ),
+  caption = "Cobertura de las variables activas"
+)
+```
+
+## Casos completos
+
+```{r}
+tabla_diagnostico_modalidades_activas <-
+  purrr::map_dfr(
+    variables_activas_acm,
+    function(
+        variable
+    ) {
+
+      tibble::tibble(
+        variable = variable,
+
+        n_valido = sum(
+          !is.na(
+            base_preparada[[variable]]
+          )
+        ),
+
+        porcentaje_valido = 100 *
+          mean(
+            !is.na(
+              base_preparada[[variable]]
+            )
+          ),
+
+        numero_modalidades = dplyr::n_distinct(
+          base_preparada[[variable]],
+          na.rm = TRUE
+        ),
+
+        modalidades = paste(
+          unique(
+            stats::na.omit(
+              as.character(
+                base_preparada[[variable]]
+              )
+            )
+          ),
+          collapse = " | "
+        )
+      )
+    }
+  )
+
+knitr::kable(
+  tabla_diagnostico_modalidades_activas |>
+    dplyr::mutate(
+      porcentaje_valido = round(
+        porcentaje_valido,
+        1
+      )
+    ),
+  caption = "Diagnóstico previo de las variables activas"
+)
+
+indicador_casos_completos <- stats::complete.cases(
+  base_preparada[
+    variables_activas_acm
+  ]
+)
+
+tabla_muestra_acm <- tibble::tibble(
+  indicador = c(
+    "Casos en la base de origen",
+    "Casos completos en las variables activas",
+    "Porcentaje retenido"
+  ),
+
+  valor = c(
+    nrow(
+      base_preparada
+    ),
+
+    sum(
+      indicador_casos_completos
+    ),
+
+    100 *
+      mean(
+        indicador_casos_completos
+      )
+  )
+)
+
+knitr::kable(
+  tabla_muestra_acm |>
+    dplyr::mutate(
+      valor = round(
+        valor,
+        1
+      )
+    ),
+  caption = "Muestra analítica del ACM objetivo–subjetivo"
+)
+```
+
+# Selección de la muestra analítica
+
+```{r}
+base_acm <- base_preparada |>
+  dplyr::mutate(
+    caso_completo_acm =
+      stats::complete.cases(
+        dplyr::pick(
+          dplyr::all_of(
+            variables_activas_acm
+          )
+        )
+      )
+  ) |>
+  dplyr::filter(
+    caso_completo_acm,
+    !is.na(
+      ponderador
+    ),
+    ponderador > 0
+  ) |>
+  dplyr::select(
+    -caso_completo_acm
+  ) |>
+  droplevels()
+```
+
+```{r}
+if (nrow(base_acm) == 0) {
+
+  stop(
+    "No quedaron casos válidos para estimar el ACM."
+  )
+}
+```
+
+```{r}
+resumen_muestra_acm <- tibble::tibble(
+  indicador = c(
+    "Casos en base de origen",
+    "Casos completos con ponderador válido",
+    "Porcentaje retenido",
+    "Suma de ponderadores",
+    "Tamaño efectivo aproximado"
+  ),
+
+  valor = c(
+    nrow(
+      base_preparada
+    ),
+
+    nrow(
+      base_acm
+    ),
+
+    100 *
+      nrow(
+        base_acm
+      ) /
+      nrow(
+        base_preparada
+      ),
+
+    sum(
+      base_acm$ponderador,
+      na.rm = TRUE
+    ),
+
+    sum(
+      base_acm$ponderador,
+      na.rm = TRUE
+    )^2 /
+      sum(
+        base_acm$ponderador^2,
+        na.rm = TRUE
+      )
+  )
+)
+
+knitr::kable(
+  resumen_muestra_acm |>
+    dplyr::mutate(
+      valor = round(
+        valor,
+        1
+      )
+    ),
+  caption = "Resumen de la muestra utilizada en el ACM"
+)
+```
+
+# Distribución de las modalidades activas
+
+```{r}
+tabla_distribucion_modalidades <- purrr::map_dfr(
+  variables_activas_acm,
+  function(
+      variable
+  ) {
+
+    base_acm |>
+      dplyr::count(
+        modalidad = .data[[variable]],
+        wt = ponderador,
+        name = "frecuencia_ponderada",
+        .drop = FALSE
+      ) |>
+      dplyr::mutate(
+        variable = variable,
+        porcentaje_ponderado = 100 *
+          frecuencia_ponderada /
+          sum(
+            frecuencia_ponderada
+          ),
+        .before = 1
+      )
+  }
+)
+```
+
+```{r}
+knitr::kable(
+  tabla_distribucion_modalidades |>
+    dplyr::mutate(
+      frecuencia_ponderada = round(
+        frecuencia_ponderada
+      ),
+      porcentaje_ponderado = round(
+        porcentaje_ponderado,
+        1
+      )
+    ),
+  caption = "Distribución ponderada de las modalidades activas"
+)
+```
+
+# Estimación del ACM
+
+## Matriz activa
+
+```{r}
+datos_activos_acm <- base_acm |>
+  dplyr::select(
+    dplyr::all_of(
+      variables_activas_acm
+    )
+  ) |>
+  as.data.frame()
+```
+
+## Modelo
+
+```{r}
+resultado_acm <- FactoMineR::MCA(
+  datos_activos_acm,
+  ncp = 10,
+  row.w = base_acm$ponderador,
+  graph = FALSE
+)
+```
+
+```{r}
+saveRDS(
+  resultado_acm,
+  file.path(
+    ruta_objetos,
+    "05_resultado_acm_objetivo_subjetivo.rds"
+  )
+)
+```
+
+# Inercia
+
+## Tabla de valores propios
+
+```{r}
+tabla_inercia <- as.data.frame(
+  resultado_acm$eig
+)
+
+tabla_inercia$dimension <- rownames(
+  tabla_inercia
+)
+
+rownames(
+  tabla_inercia
+) <- NULL
+
+tabla_inercia <- tabla_inercia[
+  ,
+  c(
+    "dimension",
+    names(
+      tabla_inercia
+    )[1:3]
+  )
+]
+
+names(
+  tabla_inercia
+) <- c(
+  "dimension",
+  "valor_propio",
+  "porcentaje_inercia",
+  "porcentaje_acumulado"
+)
+
+tabla_inercia <- tibble::as_tibble(
+  tabla_inercia
+)
+```
+
+```{r}
+knitr::kable(
+  tabla_inercia |>
+    dplyr::mutate(
+      valor_propio = round(
+        valor_propio,
+        4
+      ),
+
+      porcentaje_inercia = round(
+        porcentaje_inercia,
+        1
+      ),
+
+      porcentaje_acumulado = round(
+        porcentaje_acumulado,
+        1
+      )
+    ),
+  caption = "Valores propios e inercia del ACM objetivo–subjetivo"
+)
+```
+
+## Figura de inercia
+
+```{r}
+datos_figura_inercia <- tabla_inercia |>
+  dplyr::slice_head(
+    n = 10
+  ) |>
+  dplyr::mutate(
+    dimension = factor(
+      paste0(
+        "Dimensión ",
+        dplyr::row_number()
+      ),
+      levels = paste0(
+        "Dimensión ",
+        seq_len(
+          dplyr::n()
+        )
+      )
+    )
+  )
+```
+
+```{r}
+figura_inercia <- ggplot2::ggplot(
+  datos_figura_inercia,
+  ggplot2::aes(
+    x = dimension,
+    y = porcentaje_inercia
+  )
+) +
+  ggplot2::geom_col(
+    width = 0.7,
+    fill = "#4C78A8"
+  ) +
+  ggplot2::geom_text(
+    ggplot2::aes(
+      label = paste0(
+        round(
+          porcentaje_inercia,
+          1
+        ),
+        "%"
+      )
+    ),
+    vjust = -0.35,
+    size = 3.4
+  ) +
+  ggplot2::labs(
+    title = "Inercia explicada por las dimensiones del ACM",
+    subtitle = paste0(
+      "Las dos primeras dimensiones acumulan ",
+      round(
+        tabla_inercia$porcentaje_acumulado[2],
+        1
+      ),
+      "% de la inercia"
+    ),
+    x = NULL,
+    y = "Porcentaje de inercia",
+    caption = "Fuente: Encuesta de Bienestar Social 2023."
+  ) +
+  ggplot2::scale_y_continuous(
+    expand = ggplot2::expansion(
+      mult = c(
+        0,
+        0.12
+      )
+    )
+  ) +
+  ggplot2::theme_minimal(
+    base_size = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text.x = ggplot2::element_text(
+      angle = 35,
+      hjust = 1
+    ),
+    plot.title = ggplot2::element_text(
+      face = "bold"
+    )
+  )
+
+figura_inercia
+```
+
+# Coordenadas de las modalidades activas
+
+## Extracción
+
+```{r}
+coordenadas_modalidades <- as.data.frame(
+  resultado_acm$var$coord
+) |>
+  tibble::rownames_to_column(
+    var = "modalidad_original"
+  ) |>
+  tibble::as_tibble() |>
+  dplyr::rename_with(
+    ~ paste0(
+      "dimension_",
+      seq_along(
+        .x
+      )
+    ),
+    .cols = -modalidad_original
+  )
+```
+
+```{r}
+contribuciones_modalidades <- as.data.frame(
+  resultado_acm$var$contrib
+) |>
+  tibble::rownames_to_column(
+    var = "modalidad_original"
+  ) |>
+  tibble::as_tibble() |>
+  dplyr::rename_with(
+    ~ paste0(
+      "contribucion_",
+      seq_along(
+        .x
+      )
+    ),
+    .cols = -modalidad_original
+  )
+```
+
+```{r}
+cos2_modalidades <- as.data.frame(
+  resultado_acm$var$cos2
+) |>
+  tibble::rownames_to_column(
+    var = "modalidad_original"
+  ) |>
+  tibble::as_tibble() |>
+  dplyr::rename_with(
+    ~ paste0(
+      "cos2_",
+      seq_along(
+        .x
+      )
+    ),
+    .cols = -modalidad_original
+  )
+```
+
+```{r}
+tabla_modalidades_acm <- coordenadas_modalidades |>
+  dplyr::left_join(
+    contribuciones_modalidades,
+    by = "modalidad_original"
+  ) |>
+  dplyr::left_join(
+    cos2_modalidades,
+    by = "modalidad_original"
+  )
+```
+
+# Diccionario sustantivo de modalidades
+
+```{r}
+tabla_modalidades_acm <- tabla_modalidades_acm |>
+  dplyr::mutate(
+    modalidad = dplyr::case_when(
+      stringr::str_detect(
+        modalidad_original,
+        "Ingresos bajos"
+      ) ~ "Ingresos bajos",
+
+      stringr::str_detect(
+        modalidad_original,
+        "Ingresos medios"
+      ) ~ "Ingresos medios",
+
+      stringr::str_detect(
+        modalidad_original,
+        "Ingresos altos"
+      ) ~ "Ingresos altos",
+
+      stringr::str_detect(
+        modalidad_original,
+        "Educación básica"
+      ) ~ "Educación básica",
+
+      stringr::str_detect(
+        modalidad_original,
+        "Educación media"
+      ) ~ "Educación media",
+
+      stringr::str_detect(
+        modalidad_original,
+        "Educación superior"
+      ) ~ "Educación superior",
+
+      stringr::str_detect(
+        modalidad_original,
+        "Vivienda propia"
+      ) ~ "Vivienda propia",
+
+      stringr::str_detect(
+        modalidad_original,
+        "Vivienda arrendada"
+      ) ~ "Vivienda arrendada",
+
+      stringr::str_detect(
+        modalidad_original,
+        "Vivienda cedida u otra"
+      ) ~ "Vivienda cedida u otra",
+
+      stringr::str_detect(
+        modalidad_original,
+        "Facilidad para llegar a fin de mes"
+      ) ~ "Facilidad para llegar a fin de mes",
+
+      stringr::str_detect(
+        modalidad_original,
+        "Dificultad para llegar a fin de mes"
+      ) ~ "Dificultad para llegar a fin de mes",
+
+      stringr::str_detect(
+        modalidad_original,
+        "Menor fragilidad"
+      ) ~ "Menor fragilidad",
+
+      stringr::str_detect(
+        modalidad_original,
+        "Fragilidad intensa"
+      ) ~ "Fragilidad intensa",
+
+      stringr::str_detect(
+        modalidad_original,
+        "Protección financiera en salud"
+      ) ~ "Protección en salud",
+
+      stringr::str_detect(
+        modalidad_original,
+        "Desprotección financiera en salud"
+      ) ~ "Desprotección en salud",
+
+      TRUE ~ modalidad_original
+    ),
+
+    variable_conceptual = dplyr::case_when(
+      stringr::str_detect(
+        modalidad_original,
+        "Ingresos"
+      ) ~ "Posición de ingreso",
+
+      stringr::str_detect(
+        modalidad_original,
+        "Educación"
+      ) ~ "Nivel educacional",
+
+      stringr::str_detect(
+        modalidad_original,
+        "Vivienda"
+      ) ~ "Tenencia de vivienda",
+
+      stringr::str_detect(
+        modalidad_original,
+        "fin de mes"
+      ) ~ "Presión económica presente",
+
+      stringr::str_detect(
+        modalidad_original,
+        "fragilidad"
+      ) ~ "Fragilidad ante pérdida de ingresos",
+
+      stringr::str_detect(
+        modalidad_original,
+        "salud"
+      ) ~ "Protección financiera en salud",
+
+      TRUE ~ "No identificada"
+    ),
+
+    componente = dplyr::case_when(
+      variable_conceptual %in% c(
+        "Posición de ingreso",
+        "Nivel educacional",
+        "Tenencia de vivienda"
+      ) ~ "Objetiva",
+
+      variable_conceptual %in% c(
+        "Presión económica presente",
+        "Fragilidad ante pérdida de ingresos",
+        "Protección financiera en salud"
+      ) ~ "Subjetiva",
+
+      TRUE ~ "No identificado"
+    ),
+
+    cos2_plano_1_2 = cos2_1 + cos2_2,
+
+    contribucion_plano_1_2 =
+      contribucion_1 + contribucion_2
+  )
+```
+
+# Contribuciones de las modalidades
+
+```{r}
+tabla_contribuciones_principales <- tabla_modalidades_acm |>
+  dplyr::select(
+    componente,
+    variable_conceptual,
+    modalidad,
+    dimension_1,
+    dimension_2,
+    contribucion_1,
+    contribucion_2,
+    contribucion_plano_1_2,
+    cos2_plano_1_2
+  ) |>
+  dplyr::arrange(
+    dplyr::desc(
+      contribucion_plano_1_2
+    )
+  )
+```
+
+```{r}
+knitr::kable(
+  tabla_contribuciones_principales |>
+    dplyr::mutate(
+      dplyr::across(
+        where(
+          is.numeric
+        ),
+        ~ round(
+          .x,
+          3
+        )
+      )
+    ),
+  caption = "Coordenadas, contribuciones y calidad de representación de las modalidades"
+)
+```
+
+# Mapa principal de modalidades activas
+
+## Paletas
+
+```{r}
+paleta_variables <- c(
+  "Posición de ingreso" = "#1F77B4",
+  "Nivel educacional" = "#2CA02C",
+  "Tenencia de vivienda" = "#17A2B8",
+  "Presión económica presente" = "#D62728",
+  "Fragilidad ante pérdida de ingresos" = "#9467BD",
+  "Protección financiera en salud" = "#FF7F0E"
+)
+
+paleta_componentes <- c(
+  "Objetiva" = "#2878B5",
+  "Subjetiva" = "#B2477D"
+)
+
+paleta_genero <- c(
+  "Mujeres" = "#6A3D9A",
+  "Hombres" = "#D39B00"
+)
+
+paleta_actividad <- c(
+  "Ocupada/o" = "#0072B2",
+  "Desocupada/o" = "#D55E00",
+  "Fuera de la fuerza de trabajo" = "#6E6E6E"
+)
+
+paleta_parentalidad <- c(
+  "Biparental" = "#2B8CBE",
+  "Monoparental" = "#E34A33"
+)
+```
+
+## Figura completa
+
+```{r}
+figura_modalidades <- ggplot2::ggplot(
+  tabla_modalidades_acm,
+  ggplot2::aes(
+    x = dimension_1,
+    y = dimension_2,
+    color = variable_conceptual,
+    shape = componente
+  )
+) +
+  ggplot2::geom_hline(
+    yintercept = 0,
+    linetype = "dashed",
+    linewidth = 0.4,
+    color = "grey60"
+  ) +
+  ggplot2::geom_vline(
+    xintercept = 0,
+    linetype = "dashed",
+    linewidth = 0.4,
+    color = "grey60"
+  ) +
+  ggplot2::geom_point(
+    size = 4,
+    stroke = 1.1
+  ) +
+  ggrepel::geom_label_repel(
+    ggplot2::aes(
+      label = modalidad
+    ),
+    size = 3.35,
+    max.overlaps = Inf,
+    box.padding = 0.55,
+    point.padding = 0.35,
+    min.segment.length = 0,
+    label.size = 0.15,
+    fill = scales::alpha(
+      "white",
+      0.92
+    ),
+    show.legend = FALSE
+  ) +
+  ggplot2::scale_color_manual(
+    values = paleta_variables,
+    drop = FALSE
+  ) +
+  ggplot2::scale_shape_manual(
+    values = c(
+      "Objetiva" = 15,
+      "Subjetiva" = 16
+    ),
+    drop = FALSE
+  ) +
+  ggplot2::labs(
+    title = "Espacio objetivo–subjetivo de seguridad económica",
+    subtitle = paste0(
+      "Dimensión 1: ",
+      round(
+        tabla_inercia$porcentaje_inercia[1],
+        1
+      ),
+      "% · Dimensión 2: ",
+      round(
+        tabla_inercia$porcentaje_inercia[2],
+        1
+      ),
+      "%"
+    ),
+    x = paste0(
+      "Dimensión 1 (",
+      round(
+        tabla_inercia$porcentaje_inercia[1],
+        1
+      ),
+      "%)"
+    ),
+    y = paste0(
+      "Dimensión 2 (",
+      round(
+        tabla_inercia$porcentaje_inercia[2],
+        1
+      ),
+      "%)"
+    ),
+    color = "Dimensión analítica",
+    shape = "Componente",
+    caption = paste(
+      "La proximidad expresa asociación entre modalidades.",
+      "Las variables sociales no participan en la construcción de los ejes."
+    )
+  ) +
+  ggplot2::coord_cartesian(
+    clip = "off"
+  ) +
+  ggplot2::theme_minimal(
+    base_size = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.minor = ggplot2::element_blank(),
+    plot.title = ggplot2::element_text(
+      face = "bold",
+      size = 15
+    ),
+    legend.position = "bottom",
+    legend.box = "vertical",
+    plot.margin = ggplot2::margin(
+      10,
+      25,
+      15,
+      15
+    )
+  )
+
+figura_modalidades
+```
+
+# Coordenadas individuales
+
+```{r}
+coordenadas_individuales <- as.data.frame(
+  resultado_acm$ind$coord
+) |>
+  tibble::as_tibble() |>
+  dplyr::rename_with(
+    ~ paste0(
+      "dimension_",
+      seq_along(
+        .x
+      )
+    )
+  )
+```
+
+```{r}
+if (
+  nrow(
+    coordenadas_individuales
+  ) !=
+    nrow(
+      base_acm
+    )
+) {
+
+  stop(
+    "El número de coordenadas individuales no coincide con la base analítica."
+  )
+}
+```
+
+```{r}
+base_coordenadas_acm <- dplyr::bind_cols(
+  base_acm,
+  coordenadas_individuales
+)
+```
+
+# Función para calcular posiciones sociales
+
+```{r}
+media_ponderada_segura <- function(
+    x,
+    w
+) {
+
+  casos_validos <-
+    !is.na(
+      x
+    ) &
+    !is.na(
+      w
+    ) &
+    w > 0
+
+  if (!any(casos_validos)) {
+
+    return(
+      NA_real_
+    )
+  }
+
+  stats::weighted.mean(
+    x[
+      casos_validos
+    ],
+    w[
+      casos_validos
+    ]
+  )
+}
+```
+
+```{r}
+calcular_posiciones_grupo <- function(
+    datos,
+    variable_grupo
+) {
+
+  datos |>
+    dplyr::filter(
+      !is.na(
+        .data[[variable_grupo]]
+      )
+    ) |>
+    dplyr::group_by(
+      grupo = .data[[variable_grupo]]
+    ) |>
+    dplyr::summarise(
+      dimension_1 = media_ponderada_segura(
+        dimension_1,
+        ponderador
+      ),
+
+      dimension_2 = media_ponderada_segura(
+        dimension_2,
+        ponderador
+      ),
+
+      n = dplyr::n(),
+
+      suma_ponderadores = sum(
+        ponderador,
+        na.rm = TRUE
+      ),
+
+      .groups = "drop"
+    ) |>
+    dplyr::mutate(
+      variable_grupo = variable_grupo,
+      .before = 1
+    )
+}
+```
+
+# Posiciones sexo-etarias
+
+```{r}
+tabla_posiciones_sexo_edad <- calcular_posiciones_grupo(
+  base_coordenadas_acm,
+  "grupo_sexo_edad"
+) |>
+  dplyr::mutate(
+    genero = dplyr::case_when(
+      stringr::str_detect(
+        grupo,
+        "^Mujeres"
+      ) ~ "Mujeres",
+
+      stringr::str_detect(
+        grupo,
+        "^Hombres"
+      ) ~ "Hombres",
+
+      TRUE ~ NA_character_
+    ),
+
+    genero = factor(
+      genero,
+      levels = c(
+        "Mujeres",
+        "Hombres"
+      )
+    )
+  )
+```
+
+```{r}
+knitr::kable(
+  tabla_posiciones_sexo_edad |>
+    dplyr::mutate(
+      dplyr::across(
+        c(
+          dimension_1,
+          dimension_2
+        ),
+        ~ round(
+          .x,
+          3
+        )
+      ),
+
+      suma_ponderadores = round(
+        suma_ponderadores
+      )
+    ),
+  caption = "Posiciones medias ponderadas de los grupos sexo-etarios"
+)
+```
+
+# Posiciones familiares con menores
+
+```{r}
+tabla_posiciones_familiares <- calcular_posiciones_grupo(
+  base_coordenadas_acm,
+  "grupo_genero_estructura_menores"
+) |>
+  dplyr::mutate(
+    genero = dplyr::case_when(
+      stringr::str_detect(
+        grupo,
+        "^Mujeres"
+      ) ~ "Mujeres",
+
+      stringr::str_detect(
+        grupo,
+        "^Hombres"
+      ) ~ "Hombres",
+
+      TRUE ~ NA_character_
+    ),
+
+    estructura_parental = dplyr::case_when(
+      stringr::str_detect(
+        grupo,
+        "monoparental"
+      ) ~ "Monoparental",
+
+      stringr::str_detect(
+        grupo,
+        "biparental"
+      ) ~ "Biparental",
+
+      TRUE ~ NA_character_
+    ),
+
+    genero = factor(
+      genero,
+      levels = c(
+        "Mujeres",
+        "Hombres"
+      )
+    ),
+
+    estructura_parental = factor(
+      estructura_parental,
+      levels = c(
+        "Biparental",
+        "Monoparental"
+      )
+    )
+  )
+```
+
+```{r}
+knitr::kable(
+  tabla_posiciones_familiares |>
+    dplyr::mutate(
+      dplyr::across(
+        c(
+          dimension_1,
+          dimension_2
+        ),
+        ~ round(
+          .x,
+          3
+        )
+      ),
+
+      suma_ponderadores = round(
+        suma_ponderadores
+      )
+    ),
+  caption = "Posiciones medias de género y estructura parental entre hogares con menores"
+)
+```
+
+# Posiciones según condición de actividad
+
+```{r}
+tabla_posiciones_actividad <- calcular_posiciones_grupo(
+  base_coordenadas_acm,
+  "condicion_actividad"
+)
+```
+
+```{r}
+knitr::kable(
+  tabla_posiciones_actividad |>
+    dplyr::mutate(
+      dplyr::across(
+        c(
+          dimension_1,
+          dimension_2
+        ),
+        ~ round(
+          .x,
+          3
+        )
+      ),
+
+      suma_ponderadores = round(
+        suma_ponderadores
+      )
+    ),
+  caption = "Posiciones medias ponderadas según condición de actividad"
+)
+```
+
+# Posiciones de condiciones económicas complementarias
+
+```{r}
+tabla_posiciones_deuda <- calcular_posiciones_grupo(
+  base_coordenadas_acm,
+  "deuda"
+)
+
+tabla_posiciones_apoyo <- calcular_posiciones_grupo(
+  base_coordenadas_acm,
+  "apoyo_monetario"
+)
+
+tabla_posiciones_cambio_ingreso <- calcular_posiciones_grupo(
+  base_coordenadas_acm,
+  "cambio_ingreso"
+)
+
+tabla_posiciones_complementarias <- dplyr::bind_rows(
+  tabla_posiciones_deuda,
+  tabla_posiciones_apoyo,
+  tabla_posiciones_cambio_ingreso
+)
+```
+
+```{r}
+knitr::kable(
+  tabla_posiciones_complementarias |>
+    dplyr::mutate(
+      dplyr::across(
+        c(
+          dimension_1,
+          dimension_2
+        ),
+        ~ round(
+          .x,
+          3
+        )
+      ),
+
+      suma_ponderadores = round(
+        suma_ponderadores
+      )
+    ),
+  caption = "Posiciones medias de variables económicas complementarias"
+)
+```
+
+# Mapa con grupos sexo-etarios
+
+```{r}
+figura_sexo_edad <- ggplot2::ggplot() +
+  ggplot2::geom_hline(
+    yintercept = 0,
+    linetype = "dashed",
+    linewidth = 0.4,
+    color = "grey65"
+  ) +
+  ggplot2::geom_vline(
+    xintercept = 0,
+    linetype = "dashed",
+    linewidth = 0.4,
+    color = "grey65"
+  ) +
+  ggplot2::geom_point(
+    data = tabla_modalidades_acm,
+    ggplot2::aes(
+      x = dimension_1,
+      y = dimension_2,
+      shape = componente
+    ),
+    color = "grey65",
+    size = 3,
+    alpha = 0.8
+  ) +
+  ggrepel::geom_text_repel(
+    data = tabla_modalidades_acm,
+    ggplot2::aes(
+      x = dimension_1,
+      y = dimension_2,
+      label = modalidad
+    ),
+    color = "grey40",
+    size = 2.9,
+    max.overlaps = Inf,
+    min.segment.length = 0,
+    box.padding = 0.35,
+    show.legend = FALSE
+  ) +
+  ggplot2::geom_point(
+    data = tabla_posiciones_sexo_edad,
+    ggplot2::aes(
+      x = dimension_1,
+      y = dimension_2,
+      fill = genero
+    ),
+    shape = 21,
+    size = 5.2,
+    color = "white",
+    stroke = 1.1
+  ) +
+  ggrepel::geom_label_repel(
+    data = tabla_posiciones_sexo_edad,
+    ggplot2::aes(
+      x = dimension_1,
+      y = dimension_2,
+      label = grupo,
+      fill = genero
+    ),
+    color = "white",
+    fontface = "bold",
+    size = 3.2,
+    label.size = 0,
+    max.overlaps = Inf,
+    min.segment.length = 0,
+    box.padding = 0.65,
+    show.legend = FALSE
+  ) +
+  ggplot2::scale_fill_manual(
+    values = paleta_genero,
+    drop = FALSE
+  ) +
+  ggplot2::scale_shape_manual(
+    values = c(
+      "Objetiva" = 15,
+      "Subjetiva" = 16
+    )
+  ) +
+  ggplot2::labs(
+    title = "Posiciones sexo-etarias en el espacio objetivo–subjetivo",
+    subtitle = "Las modalidades económicas construyen el espacio y los grupos se proyectan mediante medias ponderadas",
+    x = paste0(
+      "Dimensión 1 (",
+      round(
+        tabla_inercia$porcentaje_inercia[1],
+        1
+      ),
+      "%)"
+    ),
+    y = paste0(
+      "Dimensión 2 (",
+      round(
+        tabla_inercia$porcentaje_inercia[2],
+        1
+      ),
+      "%)"
+    ),
+    fill = "Género",
+    shape = "Componente",
+    caption = "Comparación transversal; las diferencias de edad no representan trayectorias individuales."
+  ) +
+  ggplot2::coord_cartesian(
+    clip = "off"
+  ) +
+  ggplot2::theme_minimal(
+    base_size = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.minor = ggplot2::element_blank(),
+    plot.title = ggplot2::element_text(
+      face = "bold",
+      size = 15
+    ),
+    legend.position = "bottom",
+    plot.margin = ggplot2::margin(
+      10,
+      25,
+      15,
+      15
+    )
+  )
+
+figura_sexo_edad
+```
+
+# Mapa con género y estructura parental
+
+```{r}
+figura_familias <- ggplot2::ggplot() +
+  ggplot2::geom_hline(
+    yintercept = 0,
+    linetype = "dashed",
+    linewidth = 0.4,
+    color = "grey65"
+  ) +
+  ggplot2::geom_vline(
+    xintercept = 0,
+    linetype = "dashed",
+    linewidth = 0.4,
+    color = "grey65"
+  ) +
+  ggplot2::geom_point(
+    data = tabla_modalidades_acm,
+    ggplot2::aes(
+      x = dimension_1,
+      y = dimension_2,
+      shape = componente
+    ),
+    color = "grey70",
+    size = 3,
+    alpha = 0.75
+  ) +
+  ggrepel::geom_text_repel(
+    data = tabla_modalidades_acm,
+    ggplot2::aes(
+      x = dimension_1,
+      y = dimension_2,
+      label = modalidad
+    ),
+    color = "grey45",
+    size = 2.9,
+    max.overlaps = Inf,
+    min.segment.length = 0,
+    show.legend = FALSE
+  ) +
+  ggplot2::geom_point(
+    data = tabla_posiciones_familiares,
+    ggplot2::aes(
+      x = dimension_1,
+      y = dimension_2,
+      fill = genero,
+      shape = estructura_parental
+    ),
+    size = 5.5,
+    color = "white",
+    stroke = 1.1
+  ) +
+  ggrepel::geom_label_repel(
+    data = tabla_posiciones_familiares,
+    ggplot2::aes(
+      x = dimension_1,
+      y = dimension_2,
+      label = grupo,
+      fill = genero
+    ),
+    color = "white",
+    fontface = "bold",
+    size = 3.2,
+    label.size = 0,
+    max.overlaps = Inf,
+    min.segment.length = 0,
+    box.padding = 0.65,
+    show.legend = FALSE
+  ) +
+  ggplot2::scale_fill_manual(
+    values = paleta_genero,
+    drop = FALSE
+  ) +
+  ggplot2::scale_shape_manual(
+    values = c(
+      "Biparental" = 21,
+      "Monoparental" = 24
+    ),
+    drop = FALSE
+  ) +
+  ggplot2::labs(
+    title = "Género y estructura parental en el espacio económico",
+    subtitle = "Comparación entre personas de 18 a 59 años que viven en hogares con menores",
+    x = paste0(
+      "Dimensión 1 (",
+      round(
+        tabla_inercia$porcentaje_inercia[1],
+        1
+      ),
+      "%)"
+    ),
+    y = paste0(
+      "Dimensión 2 (",
+      round(
+        tabla_inercia$porcentaje_inercia[2],
+        1
+      ),
+      "%)"
+    ),
+    fill = "Género",
+    shape = "Estructura parental",
+    caption = paste(
+      "Los grupos familiares no intervienen en la construcción de los ejes.",
+      "Las posiciones corresponden a medias ponderadas."
+    )
+  ) +
+  ggplot2::coord_cartesian(
+    clip = "off"
+  ) +
+  ggplot2::theme_minimal(
+    base_size = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.minor = ggplot2::element_blank(),
+    plot.title = ggplot2::element_text(
+      face = "bold",
+      size = 15
+    ),
+    legend.position = "bottom",
+    legend.box = "horizontal",
+    plot.margin = ggplot2::margin(
+      10,
+      25,
+      15,
+      15
+    )
+  )
+
+figura_familias
+```
+
+# Mapa con condición de actividad
+
+```{r}
+figura_actividad <- ggplot2::ggplot() +
+  ggplot2::geom_hline(
+    yintercept = 0,
+    linetype = "dashed",
+    linewidth = 0.4,
+    color = "grey65"
+  ) +
+  ggplot2::geom_vline(
+    xintercept = 0,
+    linetype = "dashed",
+    linewidth = 0.4,
+    color = "grey65"
+  ) +
+  ggplot2::geom_point(
+    data = tabla_modalidades_acm,
+    ggplot2::aes(
+      x = dimension_1,
+      y = dimension_2,
+      shape = componente
+    ),
+    color = "grey70",
+    size = 3
+  ) +
+  ggrepel::geom_text_repel(
+    data = tabla_modalidades_acm,
+    ggplot2::aes(
+      x = dimension_1,
+      y = dimension_2,
+      label = modalidad
+    ),
+    color = "grey45",
+    size = 2.9,
+    max.overlaps = Inf,
+    min.segment.length = 0,
+    show.legend = FALSE
+  ) +
+  ggplot2::geom_point(
+    data = tabla_posiciones_actividad,
+    ggplot2::aes(
+      x = dimension_1,
+      y = dimension_2,
+      fill = grupo
+    ),
+    shape = 22,
+    size = 5.4,
+    color = "white",
+    stroke = 1.1
+  ) +
+  ggrepel::geom_label_repel(
+    data = tabla_posiciones_actividad,
+    ggplot2::aes(
+      x = dimension_1,
+      y = dimension_2,
+      label = grupo,
+      fill = grupo
+    ),
+    color = "white",
+    fontface = "bold",
+    size = 3.2,
+    label.size = 0,
+    max.overlaps = Inf,
+    min.segment.length = 0,
+    show.legend = FALSE
+  ) +
+  ggplot2::scale_fill_manual(
+    values = paleta_actividad,
+    drop = FALSE
+  ) +
+  ggplot2::scale_shape_manual(
+    values = c(
+      "Objetiva" = 15,
+      "Subjetiva" = 16
+    )
+  ) +
+  ggplot2::labs(
+    title = "Condición de actividad en el espacio objetivo–subjetivo",
+    subtitle = "La desocupación, la ocupación y la inactividad se proyectan sobre el espacio económico",
+    x = paste0(
+      "Dimensión 1 (",
+      round(
+        tabla_inercia$porcentaje_inercia[1],
+        1
+      ),
+      "%)"
+    ),
+    y = paste0(
+      "Dimensión 2 (",
+      round(
+        tabla_inercia$porcentaje_inercia[2],
+        1
+      ),
+      "%)"
+    ),
+    fill = "Condición de actividad",
+    shape = "Componente",
+    caption = "Fuente: Encuesta de Bienestar Social 2023."
+  ) +
+  ggplot2::coord_cartesian(
+    clip = "off"
+  ) +
+  ggplot2::theme_minimal(
+    base_size = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.minor = ggplot2::element_blank(),
+    plot.title = ggplot2::element_text(
+      face = "bold",
+      size = 15
+    ),
+    legend.position = "bottom",
+    plot.margin = ggplot2::margin(
+      10,
+      25,
+      15,
+      15
+    )
+  )
+
+figura_actividad
+```
+
+# Comparación centrada en la dimensión 1
+
+La primera dimensión suele ser la más clara para sintetizar el gradiente principal del ACM. Esta figura ordena los grupos familiares según su posición horizontal, sin exigir una interpretación fuerte de la segunda dimensión.
+
+```{r}
+figura_dimension_1_familias <- tabla_posiciones_familiares |>
+  dplyr::mutate(
+    grupo = forcats::fct_reorder(
+      grupo,
+      dimension_1
+    )
+  ) |>
+  ggplot2::ggplot(
+    ggplot2::aes(
+      x = dimension_1,
+      y = grupo,
+      fill = genero,
+      shape = estructura_parental
+    )
+  ) +
+  ggplot2::geom_vline(
+    xintercept = 0,
+    linetype = "dashed",
+    color = "grey55"
+  ) +
+  ggplot2::geom_segment(
+    ggplot2::aes(
+      x = 0,
+      xend = dimension_1,
+      yend = grupo
+    ),
+    color = "grey75",
+    linewidth = 0.8
+  ) +
+  ggplot2::geom_point(
+    size = 5,
+    color = "white",
+    stroke = 1.1
+  ) +
+  ggplot2::scale_fill_manual(
+    values = paleta_genero,
+    drop = FALSE
+  ) +
+  ggplot2::scale_shape_manual(
+    values = c(
+      "Biparental" = 21,
+      "Monoparental" = 24
+    ),
+    drop = FALSE
+  ) +
+  ggplot2::labs(
+    title = "Posición familiar en la dimensión principal",
+    subtitle = "Género y estructura parental entre hogares con menores",
+    x = "Coordenada media ponderada en la dimensión 1",
+    y = NULL,
+    fill = "Género",
+    shape = "Estructura parental",
+    caption = paste(
+      "Los nombres sustantivos de los extremos deben definirse",
+      "después de revisar las contribuciones de las modalidades."
+    )
+  ) +
+  ggplot2::theme_minimal(
+    base_size = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.minor = ggplot2::element_blank(),
+    panel.grid.major.y = ggplot2::element_blank(),
+    plot.title = ggplot2::element_text(
+      face = "bold"
+    ),
+    legend.position = "bottom"
+  )
+
+figura_dimension_1_familias
+```
+
+# Comparación sexo-etaria en la dimensión 1
+
+```{r}
+figura_dimension_1_sexo_edad <- tabla_posiciones_sexo_edad |>
+  dplyr::mutate(
+    grupo = forcats::fct_reorder(
+      grupo,
+      dimension_1
+    )
+  ) |>
+  ggplot2::ggplot(
+    ggplot2::aes(
+      x = dimension_1,
+      y = grupo,
+      fill = genero
+    )
+  ) +
+  ggplot2::geom_vline(
+    xintercept = 0,
+    linetype = "dashed",
+    color = "grey55"
+  ) +
+  ggplot2::geom_segment(
+    ggplot2::aes(
+      x = 0,
+      xend = dimension_1,
+      yend = grupo
+    ),
+    color = "grey75",
+    linewidth = 0.8
+  ) +
+  ggplot2::geom_point(
+    shape = 21,
+    size = 5,
+    color = "white",
+    stroke = 1.1
+  ) +
+  ggplot2::scale_fill_manual(
+    values = paleta_genero,
+    drop = FALSE
+  ) +
+  ggplot2::labs(
+    title = "Posiciones sexo-etarias en la dimensión principal",
+    subtitle = "Comparación de las coordenadas medias ponderadas",
+    x = "Coordenada media ponderada en la dimensión 1",
+    y = NULL,
+    fill = "Género",
+    caption = "Comparación transversal de los grupos de edad."
+  ) +
+  ggplot2::theme_minimal(
+    base_size = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.minor = ggplot2::element_blank(),
+    panel.grid.major.y = ggplot2::element_blank(),
+    plot.title = ggplot2::element_text(
+      face = "bold"
+    ),
+    legend.position = "bottom"
+  )
+
+figura_dimension_1_sexo_edad
+```
+
+# Resumen interpretativo automático
+
+```{r}
+modalidades_extremo_positivo_d1 <- tabla_modalidades_acm |>
+  dplyr::arrange(
+    dplyr::desc(
+      dimension_1
+    )
+  ) |>
+  dplyr::slice_head(
+    n = 5
+  ) |>
+  dplyr::select(
+    modalidad,
+    componente,
+    dimension_1,
+    contribucion_1
+  )
+
+modalidades_extremo_negativo_d1 <- tabla_modalidades_acm |>
+  dplyr::arrange(
+    dimension_1
+  ) |>
+  dplyr::slice_head(
+    n = 5
+  ) |>
+  dplyr::select(
+    modalidad,
+    componente,
+    dimension_1,
+    contribucion_1
+  )
+
+modalidades_extremo_positivo_d2 <- tabla_modalidades_acm |>
+  dplyr::arrange(
+    dplyr::desc(
+      dimension_2
+    )
+  ) |>
+  dplyr::slice_head(
+    n = 5
+  ) |>
+  dplyr::select(
+    modalidad,
+    componente,
+    dimension_2,
+    contribucion_2
+  )
+
+modalidades_extremo_negativo_d2 <- tabla_modalidades_acm |>
+  dplyr::arrange(
+    dimension_2
+  ) |>
+  dplyr::slice_head(
+    n = 5
+  ) |>
+  dplyr::select(
+    modalidad,
+    componente,
+    dimension_2,
+    contribucion_2
+  )
+```
+
+```{r}
+knitr::kable(
+  modalidades_extremo_positivo_d1 |>
+    dplyr::mutate(
+      dplyr::across(
+        where(
+          is.numeric
+        ),
+        ~ round(
+          .x,
+          3
+        )
+      )
+    ),
+  caption = "Modalidades ubicadas en el extremo positivo de la dimensión 1"
+)
+```
+
+```{r}
+knitr::kable(
+  modalidades_extremo_negativo_d1 |>
+    dplyr::mutate(
+      dplyr::across(
+        where(
+          is.numeric
+        ),
+        ~ round(
+          .x,
+          3
+        )
+      )
+    ),
+  caption = "Modalidades ubicadas en el extremo negativo de la dimensión 1"
+)
+```
+
+```{r}
+knitr::kable(
+  modalidades_extremo_positivo_d2 |>
+    dplyr::mutate(
+      dplyr::across(
+        where(
+          is.numeric
+        ),
+        ~ round(
+          .x,
+          3
+        )
+      )
+    ),
+  caption = "Modalidades ubicadas en el extremo positivo de la dimensión 2"
+)
+```
+
+```{r}
+knitr::kable(
+  modalidades_extremo_negativo_d2 |>
+    dplyr::mutate(
+      dplyr::across(
+        where(
+          is.numeric
+        ),
+        ~ round(
+          .x,
+          3
+        )
+      )
+    ),
+  caption = "Modalidades ubicadas en el extremo negativo de la dimensión 2"
+)
+```
+
+# Exportación de figuras
+
+```{r}
+figuras_exportar <- list(
+  "05_inercia_acm_objetivo_subjetivo" =
+    figura_inercia,
+
+  "05_mapa_modalidades_objetivo_subjetivo" =
+    figura_modalidades,
+
+  "05_mapa_grupos_sexo_edad" =
+    figura_sexo_edad,
+
+  "05_mapa_genero_estructura_parental" =
+    figura_familias,
+
+  "05_mapa_condicion_actividad" =
+    figura_actividad,
+
+  "05_dimension_1_familias" =
+    figura_dimension_1_familias,
+
+  "05_dimension_1_sexo_edad" =
+    figura_dimension_1_sexo_edad
+)
+```
+
+```{r}
+for (
+  nombre_figura in
+  names(
+    figuras_exportar
+  )
+) {
+
+  grafico_actual <-
+    figuras_exportar[[nombre_figura]]
+
+  ggplot2::ggsave(
+    filename = file.path(
+      ruta_figuras,
+      paste0(
+        nombre_figura,
+        ".png"
+      )
+    ),
+    plot = grafico_actual,
+    width = 11,
+    height = 8,
+    units = "in",
+    dpi = 300
+  )
+
+  ggplot2::ggsave(
+    filename = file.path(
+      ruta_figuras,
+      paste0(
+        nombre_figura,
+        ".svg"
+      )
+    ),
+    plot = grafico_actual,
+    width = 11,
+    height = 8,
+    units = "in"
+  )
+}
+```
+
+# Exportación de tablas CSV
+
+```{r}
+tablas_csv <- list(
+  "05_cobertura_variables_activas.csv" =
+    tabla_cobertura_activas,
+
+  "05_muestra_acm.csv" =
+    resumen_muestra_acm,
+
+  "05_distribucion_modalidades.csv" =
+    tabla_distribucion_modalidades,
+
+  "05_inercia.csv" =
+    tabla_inercia,
+
+  "05_modalidades_coordenadas_contribuciones.csv" =
+    tabla_contribuciones_principales,
+
+  "05_posiciones_sexo_edad.csv" =
+    tabla_posiciones_sexo_edad,
+
+  "05_posiciones_familiares.csv" =
+    tabla_posiciones_familiares,
+
+  "05_posiciones_actividad.csv" =
+    tabla_posiciones_actividad,
+
+  "05_posiciones_complementarias.csv" =
+    tabla_posiciones_complementarias,
+
+  "05_extremo_positivo_dimension_1.csv" =
+    modalidades_extremo_positivo_d1,
+
+  "05_extremo_negativo_dimension_1.csv" =
+    modalidades_extremo_negativo_d1,
+
+  "05_extremo_positivo_dimension_2.csv" =
+    modalidades_extremo_positivo_d2,
+
+  "05_extremo_negativo_dimension_2.csv" =
+    modalidades_extremo_negativo_d2
+)
+```
+
+```{r}
+purrr::iwalk(
+  tablas_csv,
+  function(
+      tabla,
+      nombre_archivo
+  ) {
+
+    readr::write_csv(
+      tabla,
+      file.path(
+        ruta_tablas,
+        nombre_archivo
+      ),
+      na = ""
+    )
+  }
+)
+```
+
+# Libro Excel consolidado
+
+```{r}
+archivo_excel <- file.path(
+  ruta_tablas,
+  "05_acm_objetivo_subjetivo.xlsx"
+)
+
+tablas_excel <- list(
+  "Muestra" =
+    resumen_muestra_acm,
+
+  "Cobertura activas" =
+    tabla_cobertura_activas,
+
+  "Distribución modalidades" =
+    tabla_distribucion_modalidades,
+
+  "Inercia" =
+    tabla_inercia,
+
+  "Modalidades ACM" =
+    tabla_contribuciones_principales,
+
+  "Sexo y edad" =
+    tabla_posiciones_sexo_edad,
+
+  "Estructura familiar" =
+    tabla_posiciones_familiares,
+
+  "Actividad" =
+    tabla_posiciones_actividad,
+
+  "Complementarias" =
+    tabla_posiciones_complementarias,
+
+  "Extremo positivo D1" =
+    modalidades_extremo_positivo_d1,
+
+  "Extremo negativo D1" =
+    modalidades_extremo_negativo_d1,
+
+  "Extremo positivo D2" =
+    modalidades_extremo_positivo_d2,
+
+  "Extremo negativo D2" =
+    modalidades_extremo_negativo_d2
+)
+```
+
+```{r}
+libro_salida <- openxlsx::createWorkbook()
+
+estilo_encabezado <- openxlsx::createStyle(
+  textDecoration = "bold",
+  halign = "center",
+  valign = "center",
+  wrapText = TRUE
+)
+
+for (
+  nombre_hoja in
+  names(
+    tablas_excel
+  )
+) {
+
+  tabla_actual <-
+    tablas_excel[[nombre_hoja]]
+
+  nombre_hoja_seguro <- substr(
+    nombre_hoja,
+    1,
+    31
+  )
+
+  openxlsx::addWorksheet(
+    libro_salida,
+    nombre_hoja_seguro
+  )
+
+  openxlsx::writeDataTable(
+    libro_salida,
+    sheet = nombre_hoja_seguro,
+    x = tabla_actual
+  )
+
+  openxlsx::freezePane(
+    libro_salida,
+    sheet = nombre_hoja_seguro,
+    firstRow = TRUE
+  )
+
+  if (
+    ncol(
+      tabla_actual
+    ) > 0
+  ) {
+
+    openxlsx::addStyle(
+      libro_salida,
+      sheet = nombre_hoja_seguro,
+      style = estilo_encabezado,
+      rows = 1,
+      cols = seq_len(
+        ncol(
+          tabla_actual
+        )
+      ),
+      gridExpand = TRUE
+    )
+
+    openxlsx::setColWidths(
+      libro_salida,
+      sheet = nombre_hoja_seguro,
+      cols = seq_len(
+        ncol(
+          tabla_actual
+        )
+      ),
+      widths = "auto"
+    )
+  }
+}
+
+openxlsx::saveWorkbook(
+  libro_salida,
+  file = archivo_excel,
+  overwrite = TRUE
+)
+```
+
+# Exportación de objetos reutilizables
+
+```{r}
+saveRDS(
+  base_acm,
+  file.path(
+    ruta_objetos,
+    "05_base_acm_objetivo_subjetivo.rds"
+  )
+)
+
+saveRDS(
+  base_coordenadas_acm,
+  file.path(
+    ruta_objetos,
+    "05_base_con_coordenadas_individuales.rds"
+  )
+)
+
+saveRDS(
+  tabla_modalidades_acm,
+  file.path(
+    ruta_objetos,
+    "05_modalidades_acm.rds"
+  )
+)
+
+saveRDS(
+  tabla_posiciones_sexo_edad,
+  file.path(
+    ruta_objetos,
+    "05_posiciones_sexo_edad.rds"
+  )
+)
+
+saveRDS(
+  tabla_posiciones_familiares,
+  file.path(
+    ruta_objetos,
+    "05_posiciones_familiares.rds"
+  )
+)
+
+saveRDS(
+  tabla_posiciones_actividad,
+  file.path(
+    ruta_objetos,
+    "05_posiciones_actividad.rds"
+  )
+)
+```
+
+# Resumen automático
+
+```{r}
+cat(
+  "Casos en la base de origen:",
+  nrow(
+    base_preparada
+  ),
+  "\n"
+)
+
+cat(
+  "Casos utilizados en el ACM:",
+  nrow(
+    base_acm
+  ),
+  "\n"
+)
+
+cat(
+  "Porcentaje retenido:",
+  round(
+    100 *
+      nrow(
+        base_acm
+      ) /
+      nrow(
+        base_preparada
+      ),
+    1
+  ),
+  "%.\n"
+)
+
+cat(
+  "Inercia de la dimensión 1:",
+  round(
+    tabla_inercia$porcentaje_inercia[1],
+    1
+  ),
+  "%.\n"
+)
+
+cat(
+  "Inercia de la dimensión 2:",
+  round(
+    tabla_inercia$porcentaje_inercia[2],
+    1
+  ),
+  "%.\n"
+)
+
+cat(
+  "Inercia acumulada de las dos primeras dimensiones:",
+  round(
+    tabla_inercia$porcentaje_acumulado[2],
+    1
+  ),
+  "%.\n"
+)
+
+cat(
+  "Libro Excel:",
+  normalizePath(
+    archivo_excel,
+    winslash = "/",
+    mustWork = FALSE
+  ),
+  "\n"
+)
+```
+
+# Información de la sesión
+
+```{r}
+sessionInfo()
+```

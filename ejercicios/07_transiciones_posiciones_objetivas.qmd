@@ -1,0 +1,4058 @@
+---
+title: "07. Transiciones de endeudamiento"
+subtitle: "Deuda total respecto del ingreso efectivo anual de los hogares"
+author: "Gonzalo Torres"
+date: today
+lang: es
+
+format:
+  html:
+    toc: true
+    toc-location: right
+    toc-depth: 3
+    number-sections: true
+    code-fold: true
+    code-summary: "Mostrar código"
+    code-tools: true
+    embed-resources: true
+    page-layout: article
+    fig-responsive: true
+    smooth-scroll: true
+
+execute:
+  echo: true
+  warning: false
+  message: false
+  freeze: auto
+
+knitr:
+  opts_chunk:
+    fig.align: center
+    out.width: "100%"
+    dpi: 150
+---
+
+<style>
+
+/* =========================================================
+   ESTRUCTURA GENERAL
+   ========================================================= */
+
+#quarto-content {
+  column-gap: 2.2rem;
+}
+
+main.content {
+  min-width: 0;
+}
+
+#quarto-document-content {
+  min-width: 0;
+}
+
+/* =========================================================
+   TEXTO
+   ========================================================= */
+
+main.content p,
+main.content li {
+  max-width: 78ch;
+}
+
+main.content h1,
+main.content h2,
+main.content h3 {
+  overflow-wrap: anywhere;
+}
+
+/* =========================================================
+   FIGURAS
+   ========================================================= */
+
+.cell-output-display,
+.quarto-figure,
+.figure {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.cell-output-display {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.cell-output-display img,
+.cell-output-display svg,
+.quarto-figure img,
+.quarto-figure svg {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.cell,
+.cell-output,
+.cell-output-display,
+.quarto-figure {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+/* =========================================================
+   TABLAS
+   ========================================================= */
+
+.table-responsive,
+.cell-output-display:has(table) {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+table {
+  width: auto;
+  max-width: 100%;
+  font-size: 0.9rem;
+}
+
+table th,
+table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* =========================================================
+   CÓDIGO
+   ========================================================= */
+
+div.sourceCode,
+pre.sourceCode,
+pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* =========================================================
+   TABLA DE CONTENIDOS
+   ========================================================= */
+
+#quarto-margin-sidebar {
+  min-width: 0;
+}
+
+#TOC {
+  font-size: 0.86rem;
+}
+
+#TOC a {
+  overflow-wrap: anywhere;
+}
+
+/* =========================================================
+   PANTALLAS PEQUEÑAS
+   ========================================================= */
+
+@media (max-width: 991.98px) {
+
+  main.content p,
+  main.content li {
+    max-width: none;
+  }
+
+  .cell-output-display {
+    overflow-x: auto;
+  }
+
+  table {
+    font-size: 0.84rem;
+  }
+}
+
+</style>
+
+# Propósito
+
+Este documento desarrolla un ejercicio longitudinal con el panel de la Encuesta
+Financiera de Hogares para 2007, 2011 y 2014.
+
+El análisis estudia la relación entre dos magnitudes objetivas:
+
+1. el monto total de deuda del hogar;
+2. el ingreso total efectivo anual del hogar.
+
+El cociente entre ambas corresponde a una medida de deuda sobre ingreso:
+
+$$
+RDI =
+\frac{\text{deuda total}}
+{\text{ingreso efectivo mensual} \times 12}
+$$
+
+La medida expresa cuántos años de ingreso efectivo representa el stock de deuda
+del hogar, suponiendo que el ingreso mensual se mantuviera constante.
+
+No debe interpretarse como proporción del ingreso mensual destinada al pago de
+cuotas. Esa interpretación correspondería a una medida de carga financiera, que
+requiere información sobre pagos mensuales.
+
+Para facilitar la exposición se construyen cuatro estados:
+
+- sin deuda;
+- deuda baja;
+- deuda intermedia;
+- deuda alta.
+
+El interés principal está en observar:
+
+- la distribución de estos estados en cada ola;
+- cuánto permanecen o cambian los hogares;
+- qué transiciones son más frecuentes;
+- la dirección general de los movimientos;
+- diferencias descriptivas según género y situación de pareja de la persona de
+  referencia observada en 2014;
+- las trayectorias completas entre 2007, 2011 y 2014.
+
+# Configuración del entorno
+
+## Paquetes
+
+```{r}
+paquetes_necesarios <- c(
+  "dplyr",
+  "tidyr",
+  "purrr",
+  "stringr",
+  "forcats",
+  "tibble",
+  "readr",
+  "haven",
+  "openxlsx",
+  "here",
+  "knitr",
+  "ggplot2",
+  "ggalluvial",
+  "scales"
+)
+
+options(
+  repos = c(
+    CRAN = "https://cloud.r-project.org"
+  ),
+  dplyr.summarise.inform = FALSE,
+  scipen = 999,
+  stringsAsFactors = FALSE
+)
+
+paquetes_faltantes <- paquetes_necesarios[
+  !paquetes_necesarios %in%
+    rownames(
+      installed.packages()
+    )
+]
+
+if (
+  length(
+    paquetes_faltantes
+  ) > 0
+) {
+
+  install.packages(
+    paquetes_faltantes,
+    repos = "https://cloud.r-project.org"
+  )
+}
+
+invisible(
+  lapply(
+    paquetes_necesarios,
+    library,
+    character.only = TRUE
+  )
+)
+```
+
+# Rutas del proyecto
+
+```{r}
+ruta_proyecto <- normalizePath(
+  here::here(),
+  winslash = "/",
+  mustWork = FALSE
+)
+
+ruta_datos <- here::here(
+  "Datos",
+  "EFH Panel"
+)
+
+ruta_salidas <- here::here(
+  "outputs",
+  "07_transiciones_deuda_ingreso"
+)
+
+ruta_tablas <- file.path(
+  ruta_salidas,
+  "tablas"
+)
+
+ruta_figuras <- file.path(
+  ruta_salidas,
+  "figuras"
+)
+
+ruta_objetos <- file.path(
+  ruta_salidas,
+  "objetos"
+)
+
+dir.create(
+  ruta_tablas,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+dir.create(
+  ruta_figuras,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+dir.create(
+  ruta_objetos,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+ruta_efh_2014 <- file.path(
+  ruta_datos,
+  "Base no imputada EFH 2014.dta"
+)
+
+if (
+  !file.exists(
+    ruta_efh_2014
+  )
+) {
+
+  archivos_2014_candidatos <- list.files(
+    path = ruta_datos,
+    pattern = "2014.*\\.dta$|\\.dta$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+
+  if (
+    length(
+      archivos_2014_candidatos
+    ) == 1
+  ) {
+
+    ruta_efh_2014 <- archivos_2014_candidatos[[1]]
+
+  } else {
+
+    stop(
+      paste0(
+        "No se encontró de manera inequívoca la base EFH 2014.\n\n",
+        "Archivo esperado:\n",
+        file.path(
+          ruta_datos,
+          "Base no imputada EFH 2014.dta"
+        ),
+        "\n\nArchivos .dta encontrados:\n",
+        paste(
+          basename(
+            archivos_2014_candidatos
+          ),
+          collapse = "\n"
+        )
+      )
+    )
+  }
+}
+
+cat(
+  "Directorio del proyecto:\n",
+  ruta_proyecto,
+  "\n\n"
+)
+
+cat(
+  "Directorio de datos EFH:\n",
+  normalizePath(
+    ruta_datos,
+    winslash = "/",
+    mustWork = FALSE
+  ),
+  "\n\n"
+)
+
+cat(
+  "Base EFH 2014 seleccionada:\n",
+  normalizePath(
+    ruta_efh_2014,
+    winslash = "/",
+    mustWork = FALSE
+  ),
+  "\n"
+)
+```
+
+# Parámetros analíticos
+
+Los puntos de corte pueden modificarse desde este bloque.
+
+La clasificación principal distingue:
+
+- sin deuda;
+- deuda baja: deuda positiva y hasta 50% del ingreso anual;
+- deuda intermedia: más de 50% y hasta 150%;
+- deuda alta: más de 150% del ingreso anual.
+
+```{r}
+limite_deuda_baja <- 0.50
+
+limite_deuda_intermedia <- 1.50
+
+anios_analisis <- c(
+  2007L,
+  2011L,
+  2014L
+)
+```
+
+# Paleta y etiquetas
+
+```{r}
+color_mostaza <- "#F2C94C"
+
+color_mostaza_oscuro <- "#C99A20"
+
+color_morado_claro <- "#A978B5"
+
+color_morado_oscuro <- "#4B1F63"
+
+color_gris_oscuro <- "#4D4D4D"
+
+color_gris_medio <- "#A7A3AA"
+
+color_gris_claro <- "#D9D9D9"
+
+color_texto <- "#2E2E2E"
+
+niveles_deuda <- c(
+  "Sin deuda",
+  "Deuda baja",
+  "Deuda intermedia",
+  "Deuda alta"
+)
+
+paleta_deuda <- c(
+  "Sin deuda" =
+    color_mostaza,
+
+  "Deuda baja" =
+    color_mostaza_oscuro,
+
+  "Deuda intermedia" =
+    color_morado_claro,
+
+  "Deuda alta" =
+    color_morado_oscuro
+)
+
+etiquetas_deuda_leyenda <- c(
+  "Sin deuda" =
+    "Sin deuda",
+
+  "Deuda baja" =
+    "Baja: hasta 50% del ingreso anual",
+
+  "Deuda intermedia" =
+    "Intermedia: 50% a 150% del ingreso anual",
+
+  "Deuda alta" =
+    "Alta: más de 150% del ingreso anual"
+)
+
+niveles_direccion <- c(
+  "Disminuyó",
+  "Permaneció",
+  "Aumentó"
+)
+
+paleta_direccion_composicion <- c(
+  "Disminuyó" =
+    color_mostaza,
+
+  "Permaneció" =
+    color_gris_medio,
+
+  "Aumentó" =
+    color_morado_oscuro
+)
+```
+
+# Tema gráfico común
+
+```{r}
+tema_taller <- function(
+    tamano_base = 12
+) {
+
+  ggplot2::theme_minimal(
+    base_size = tamano_base
+  ) +
+    ggplot2::theme(
+      panel.grid.minor =
+        ggplot2::element_blank(),
+
+      panel.grid.major.x =
+        ggplot2::element_blank(),
+
+      plot.title =
+        ggplot2::element_text(
+          face = "bold",
+          color = "#2B183B",
+          size = tamano_base + 3,
+          margin = ggplot2::margin(
+            b = 8
+          )
+        ),
+
+      plot.subtitle =
+        ggplot2::element_text(
+          color = "grey30",
+          size = tamano_base,
+          lineheight = 1.1,
+          margin = ggplot2::margin(
+            b = 12
+          )
+        ),
+
+      plot.caption =
+        ggplot2::element_text(
+          color = "grey35",
+          size = tamano_base - 2,
+          hjust = 0,
+          lineheight = 1.1,
+          margin = ggplot2::margin(
+            t = 12
+          )
+        ),
+
+      plot.margin =
+        ggplot2::margin(
+          t = 18,
+          r = 18,
+          b = 20,
+          l = 18
+        ),
+
+      legend.position =
+        "bottom",
+
+      legend.box =
+        "vertical",
+
+      legend.text =
+        ggplot2::element_text(
+          size = tamano_base - 1
+        ),
+
+      legend.title =
+        ggplot2::element_text(
+          face = "bold"
+        )
+    )
+}
+```
+
+# Funciones auxiliares
+
+## Conversión numérica segura
+
+```{r}
+convertir_numerico <- function(
+    x
+) {
+
+  if (
+    inherits(
+      x,
+      "haven_labelled"
+    )
+  ) {
+
+    x <- haven::zap_labels(
+      x
+    )
+  }
+
+  suppressWarnings(
+    as.numeric(
+      as.character(
+        x
+      )
+    )
+  )
+}
+```
+
+## Conversión de variables etiquetadas
+
+```{r}
+convertir_etiquetado_a_texto <- function(
+    x
+) {
+
+  if (
+    inherits(
+      x,
+      "haven_labelled"
+    )
+  ) {
+
+    return(
+      as.character(
+        haven::as_factor(
+          x,
+          levels = "default"
+        )
+      )
+    )
+  }
+
+  if (
+    is.factor(
+      x
+    )
+  ) {
+
+    return(
+      as.character(
+        x
+      )
+    )
+  }
+
+  as.character(
+    x
+  )
+}
+```
+
+## Normalización de texto
+
+```{r}
+normalizar_texto <- function(
+    x
+) {
+
+  x |>
+    as.character() |>
+    stringr::str_to_lower() |>
+    stringr::str_replace_all(
+      "[áàäâ]",
+      "a"
+    ) |>
+    stringr::str_replace_all(
+      "[éèëê]",
+      "e"
+    ) |>
+    stringr::str_replace_all(
+      "[íìïî]",
+      "i"
+    ) |>
+    stringr::str_replace_all(
+      "[óòöô]",
+      "o"
+    ) |>
+    stringr::str_replace_all(
+      "[úùüû]",
+      "u"
+    ) |>
+    stringr::str_replace_all(
+      "ñ",
+      "n"
+    ) |>
+    stringr::str_squish()
+}
+```
+
+## Primer valor válido
+
+```{r}
+primer_valor_valido <- function(
+    x
+) {
+
+  valores_validos <- x[
+    !is.na(
+      x
+    )
+  ]
+
+  if (
+    length(
+      valores_validos
+    ) == 0
+  ) {
+
+    return(
+      NA
+    )
+  }
+
+  valores_validos[[1]]
+}
+```
+
+## Media ponderada segura
+
+```{r}
+media_ponderada_segura <- function(
+    x,
+    ponderador
+) {
+
+  casos_validos <-
+    !is.na(
+      x
+    ) &
+    !is.na(
+      ponderador
+    ) &
+    ponderador > 0
+
+  if (
+    sum(
+      casos_validos
+    ) == 0
+  ) {
+
+    return(
+      NA_real_
+    )
+  }
+
+  stats::weighted.mean(
+    x[
+      casos_validos
+    ],
+    ponderador[
+      casos_validos
+    ]
+  )
+}
+```
+
+## Mediana ponderada
+
+```{r}
+mediana_ponderada_segura <- function(
+    x,
+    ponderador
+) {
+
+  casos_validos <-
+    !is.na(
+      x
+    ) &
+    !is.na(
+      ponderador
+    ) &
+    ponderador > 0
+
+  if (
+    sum(
+      casos_validos
+    ) == 0
+  ) {
+
+    return(
+      NA_real_
+    )
+  }
+
+  x_valido <- x[
+    casos_validos
+  ]
+
+  w_valido <- ponderador[
+    casos_validos
+  ]
+
+  orden <- order(
+    x_valido
+  )
+
+  x_ordenado <- x_valido[
+    orden
+  ]
+
+  w_ordenado <- w_valido[
+    orden
+  ]
+
+  proporcion_acumulada <- cumsum(
+    w_ordenado
+  ) /
+    sum(
+      w_ordenado
+    )
+
+  x_ordenado[
+    which(
+      proporcion_acumulada >= 0.5
+    )[1]
+  ]
+}
+```
+
+## Limpieza UTF-8
+
+```{r}
+limpiar_vector_utf8 <- function(
+    x
+) {
+
+  if (
+    is.factor(
+      x
+    )
+  ) {
+
+    x <- as.character(
+      x
+    )
+  }
+
+  if (
+    !is.character(
+      x
+    )
+  ) {
+
+    return(
+      x
+    )
+  }
+
+  resultado <- suppressWarnings(
+    iconv(
+      x,
+      from = "",
+      to = "UTF-8",
+      sub = NA
+    )
+  )
+
+  posiciones_fallidas <-
+    is.na(
+      resultado
+    ) &
+    !is.na(
+      x
+    )
+
+  if (
+    any(
+      posiciones_fallidas
+    )
+  ) {
+
+    resultado[
+      posiciones_fallidas
+    ] <- suppressWarnings(
+      iconv(
+        x[
+          posiciones_fallidas
+        ],
+        from = "windows-1252",
+        to = "UTF-8",
+        sub = ""
+      )
+    )
+  }
+
+  posiciones_aun_fallidas <-
+    is.na(
+      resultado
+    ) &
+    !is.na(
+      x
+    )
+
+  if (
+    any(
+      posiciones_aun_fallidas
+    )
+  ) {
+
+    resultado[
+      posiciones_aun_fallidas
+    ] <- suppressWarnings(
+      iconv(
+        x[
+          posiciones_aun_fallidas
+        ],
+        from = "latin1",
+        to = "UTF-8",
+        sub = ""
+      )
+    )
+  }
+
+  resultado
+}
+```
+
+## Exportación segura
+
+```{r}
+hacer_exportable <- function(
+    datos
+) {
+
+  salida <- as.data.frame(
+    datos
+  )
+
+  for (
+    nombre_variable in
+    names(
+      salida
+    )
+  ) {
+
+    variable <- salida[[
+      nombre_variable
+    ]]
+
+    if (
+      inherits(
+        variable,
+        "haven_labelled"
+      )
+    ) {
+
+      salida[[
+        nombre_variable
+      ]] <- as.character(
+        haven::as_factor(
+          variable
+        )
+      )
+
+    } else if (
+      is.factor(
+        variable
+      )
+    ) {
+
+      salida[[
+        nombre_variable
+      ]] <- as.character(
+        variable
+      )
+    }
+
+    if (
+      is.character(
+        salida[[
+          nombre_variable
+        ]]
+      )
+    ) {
+
+      salida[[
+        nombre_variable
+      ]] <- limpiar_vector_utf8(
+        salida[[
+          nombre_variable
+        ]]
+      )
+    }
+  }
+
+  names(
+    salida
+  ) <- limpiar_vector_utf8(
+    names(
+      salida
+    )
+  )
+
+  salida
+}
+```
+
+# Identificación de la base
+
+```{r}
+archivos_candidatos <- c(
+  file.path(
+    ruta_datos,
+    "efh_panel_balanceado_corregido.rds"
+  ),
+
+  file.path(
+    ruta_datos,
+    "efh_panel_balanceado_corregido.csv"
+  ),
+
+  file.path(
+    ruta_datos,
+    "efh_panel_tres_olas_corregido.rds"
+  ),
+
+  file.path(
+    ruta_datos,
+    "efh_panel_tres_olas_corregido.csv"
+  )
+)
+
+archivos_encontrados <- archivos_candidatos[
+  file.exists(
+    archivos_candidatos
+  )
+]
+
+if (
+  length(
+    archivos_encontrados
+  ) == 0
+) {
+
+  archivos_disponibles <- list.files(
+    ruta_datos,
+    full.names = FALSE
+  )
+
+  stop(
+    paste0(
+      "No se encontró la base completa corregida del panel EFH en:\n",
+      ruta_datos,
+      "\n\nSe buscó alguno de estos archivos:\n",
+      paste(
+        basename(
+          archivos_candidatos
+        ),
+        collapse = "\n"
+      ),
+      "\n\nArchivos actualmente disponibles:\n",
+      paste(
+        archivos_disponibles,
+        collapse = "\n"
+      )
+    )
+  )
+}
+
+archivo_panel <- archivos_encontrados[[1]]
+
+cat(
+  "Archivo seleccionado:\n",
+  basename(
+    archivo_panel
+  ),
+  "\n"
+)
+```
+
+# Lectura de la base
+
+```{r}
+extension_archivo <- tolower(
+  tools::file_ext(
+    archivo_panel
+  )
+)
+
+if (
+  extension_archivo == "rds"
+) {
+
+  efh_panel <- readRDS(
+    archivo_panel
+  )
+
+} else if (
+  extension_archivo == "csv"
+) {
+
+  efh_panel <- readr::read_csv(
+    archivo_panel,
+    show_col_types = FALSE,
+    progress = FALSE
+  )
+
+} else {
+
+  stop(
+    paste0(
+      "La extensión ",
+      extension_archivo,
+      " no está contemplada."
+    )
+  )
+}
+
+efh_panel <- tibble::as_tibble(
+  efh_panel
+)
+
+cat(
+  "Filas:",
+  nrow(
+    efh_panel
+  ),
+  "\n"
+)
+
+cat(
+  "Columnas:",
+  ncol(
+    efh_panel
+  ),
+  "\n"
+)
+
+cat(
+  "Hogares:",
+  dplyr::n_distinct(
+    efh_panel$panel_id
+  ),
+  "\n"
+)
+```
+
+# Verificación de variables
+
+```{r}
+variables_requeridas <- c(
+  "panel_id",
+  "id",
+  "anio",
+  "ingreso_total_efectivo",
+  "deuda_total"
+)
+
+variables_faltantes <- setdiff(
+  variables_requeridas,
+  names(
+    efh_panel
+  )
+)
+
+if (
+  length(
+    variables_faltantes
+  ) > 0
+) {
+
+  stop(
+    paste0(
+      "La base seleccionada no contiene las variables necesarias:\n",
+      paste(
+        variables_faltantes,
+        collapse = ", "
+      ),
+      "\n\nAsegúrese de copiar a Datos/EFH Panel la base balanceada completa."
+    )
+  )
+}
+```
+
+# Preparación de variables opcionales
+
+```{r}
+if (
+  "factor" %in%
+    names(
+      efh_panel
+    )
+) {
+
+  ponderador_panel <- convertir_numerico(
+    efh_panel$factor
+  )
+
+} else {
+
+  ponderador_panel <- rep(
+    1,
+    nrow(
+      efh_panel
+    )
+  )
+}
+
+if (
+  "imp" %in%
+    names(
+      efh_panel
+    )
+) {
+
+  imputacion_panel <- convertir_numerico(
+    efh_panel$imp
+  )
+
+} else {
+
+  imputacion_panel <- rep(
+    NA_real_,
+    nrow(
+      efh_panel
+    )
+  )
+}
+```
+
+# Base longitudinal inicial
+
+```{r}
+base_panel <- efh_panel |>
+  dplyr::transmute(
+    panel_id =
+      as.character(
+        panel_id
+      ),
+
+    id =
+      as.character(
+        id
+      ),
+
+    anio =
+      as.integer(
+        convertir_numerico(
+          anio
+        )
+      ),
+
+    imp =
+      imputacion_panel,
+
+    ponderador =
+      ponderador_panel,
+
+    ingreso_efectivo_mensual =
+      convertir_numerico(
+        ingreso_total_efectivo
+      ),
+
+    deuda_total =
+      convertir_numerico(
+        deuda_total
+      )
+  ) |>
+  dplyr::filter(
+    anio %in%
+      anios_analisis
+  ) |>
+  dplyr::mutate(
+    ponderador =
+      dplyr::case_when(
+        is.na(
+          ponderador
+        ) ~ 1,
+
+        ponderador <= 0 ~ 1,
+
+        TRUE ~ ponderador
+      ),
+
+    ingreso_efectivo_anual =
+      ingreso_efectivo_mensual *
+        12
+  ) |>
+  dplyr::arrange(
+    panel_id,
+    anio
+  )
+```
+
+# Auditoría de duplicados
+
+```{r}
+tabla_duplicados <- base_panel |>
+  dplyr::count(
+    panel_id,
+    anio,
+    name = "numero_registros"
+  ) |>
+  dplyr::filter(
+    numero_registros > 1
+  )
+
+if (
+  nrow(
+    tabla_duplicados
+  ) > 0
+) {
+
+  stop(
+    paste0(
+      "La base presenta duplicados por panel_id y año. ",
+      "Revise el objeto tabla_duplicados."
+    )
+  )
+}
+```
+
+# Auditoría del identificador
+
+```{r}
+tabla_id_panel <- base_panel |>
+  dplyr::group_by(
+    anio
+  ) |>
+  dplyr::summarise(
+    hogares =
+      dplyr::n_distinct(
+        panel_id
+      ),
+
+    identificadores_id =
+      dplyr::n_distinct(
+        id
+      ),
+
+    id_perdidos =
+      sum(
+        is.na(
+          id
+        ) |
+          id == ""
+      ),
+
+    .groups =
+      "drop"
+  )
+
+knitr::kable(
+  tabla_id_panel,
+  caption = "Disponibilidad del identificador de hogar por ola"
+)
+```
+
+# Auditoría de cobertura
+
+```{r}
+tabla_cobertura <- base_panel |>
+  dplyr::group_by(
+    anio
+  ) |>
+  dplyr::summarise(
+    hogares =
+      dplyr::n_distinct(
+        panel_id
+      ),
+
+    ingreso_valido =
+      sum(
+        !is.na(
+          ingreso_efectivo_mensual
+        ) &
+          ingreso_efectivo_mensual > 0
+      ),
+
+    porcentaje_ingreso_valido =
+      100 *
+        mean(
+          !is.na(
+            ingreso_efectivo_mensual
+          ) &
+            ingreso_efectivo_mensual > 0
+        ),
+
+    deuda_valida =
+      sum(
+        !is.na(
+          deuda_total
+        ) &
+          deuda_total >= 0
+      ),
+
+    porcentaje_deuda_valida =
+      100 *
+        mean(
+          !is.na(
+            deuda_total
+          ) &
+            deuda_total >= 0
+        ),
+
+    ingreso_y_deuda_validos =
+      sum(
+        !is.na(
+          ingreso_efectivo_mensual
+        ) &
+          ingreso_efectivo_mensual > 0 &
+          !is.na(
+            deuda_total
+          ) &
+          deuda_total >= 0
+      ),
+
+    porcentaje_ambos_validos =
+      100 *
+        mean(
+          !is.na(
+            ingreso_efectivo_mensual
+          ) &
+            ingreso_efectivo_mensual > 0 &
+          !is.na(
+            deuda_total
+          ) &
+            deuda_total >= 0
+        ),
+
+    .groups =
+      "drop"
+  )
+```
+
+```{r}
+knitr::kable(
+  tabla_cobertura |>
+    dplyr::mutate(
+      dplyr::across(
+        dplyr::starts_with(
+          "porcentaje"
+        ),
+        ~ round(
+          .x,
+          1
+        )
+      )
+    ),
+  caption = "Cobertura de ingreso efectivo y deuda total por ola"
+)
+```
+
+# Selección del panel analítico
+
+```{r}
+disponibilidad_hogar <- base_panel |>
+  dplyr::mutate(
+    observacion_valida =
+      !is.na(
+        ingreso_efectivo_mensual
+      ) &
+        ingreso_efectivo_mensual > 0 &
+      !is.na(
+        deuda_total
+      ) &
+        deuda_total >= 0
+  ) |>
+  dplyr::group_by(
+    panel_id
+  ) |>
+  dplyr::summarise(
+    olas_observadas =
+      dplyr::n_distinct(
+        anio
+      ),
+
+    olas_validas =
+      sum(
+        observacion_valida
+      ),
+
+    panel_analitico =
+      olas_observadas ==
+        length(
+          anios_analisis
+        ) &
+      olas_validas ==
+        length(
+          anios_analisis
+        ),
+
+    .groups =
+      "drop"
+  )
+```
+
+```{r}
+identificadores_analiticos <- disponibilidad_hogar |>
+  dplyr::filter(
+    panel_analitico
+  ) |>
+  dplyr::pull(
+    panel_id
+  )
+
+base_analitica <- base_panel |>
+  dplyr::filter(
+    panel_id %in%
+      identificadores_analiticos
+  ) |>
+  dplyr::arrange(
+    panel_id,
+    anio
+  )
+```
+
+```{r}
+tabla_muestra <- tibble::tibble(
+  indicador = c(
+    "Hogares presentes en las tres olas",
+    "Hogares con ingreso y deuda válidos en las tres olas",
+    "Hogares excluidos por información incompleta",
+    "Observaciones hogar-ola del panel analítico"
+  ),
+
+  valor = c(
+    sum(
+      disponibilidad_hogar$olas_observadas ==
+        length(
+          anios_analisis
+        )
+    ),
+
+    length(
+      identificadores_analiticos
+    ),
+
+    sum(
+      disponibilidad_hogar$olas_observadas ==
+        length(
+          anios_analisis
+        )
+    ) -
+      length(
+        identificadores_analiticos
+      ),
+
+    nrow(
+      base_analitica
+    )
+  )
+)
+```
+
+```{r}
+knitr::kable(
+  tabla_muestra,
+  caption = "Construcción del panel analítico"
+)
+```
+
+# Construcción de la razón deuda-ingreso
+
+```{r}
+base_analitica <- base_analitica |>
+  dplyr::mutate(
+    razon_deuda_ingreso =
+      dplyr::case_when(
+        deuda_total == 0 ~
+          0,
+
+        deuda_total > 0 &
+          ingreso_efectivo_anual > 0 ~
+          deuda_total /
+            ingreso_efectivo_anual,
+
+        TRUE ~
+          NA_real_
+      ),
+
+    estado_deuda =
+      dplyr::case_when(
+        deuda_total == 0 ~
+          "Sin deuda",
+
+        razon_deuda_ingreso > 0 &
+          razon_deuda_ingreso <=
+            limite_deuda_baja ~
+          "Deuda baja",
+
+        razon_deuda_ingreso >
+          limite_deuda_baja &
+          razon_deuda_ingreso <=
+            limite_deuda_intermedia ~
+          "Deuda intermedia",
+
+        razon_deuda_ingreso >
+          limite_deuda_intermedia ~
+          "Deuda alta",
+
+        TRUE ~
+          NA_character_
+      ),
+
+    estado_deuda =
+      factor(
+        estado_deuda,
+        levels = niveles_deuda,
+        ordered = TRUE
+      ),
+
+    nivel_deuda_numerico =
+      dplyr::case_when(
+        estado_deuda == "Sin deuda" ~
+          0L,
+
+        estado_deuda == "Deuda baja" ~
+          1L,
+
+        estado_deuda == "Deuda intermedia" ~
+          2L,
+
+        estado_deuda == "Deuda alta" ~
+          3L,
+
+        TRUE ~
+          NA_integer_
+      )
+  )
+```
+
+# Auditoría de la razón deuda-ingreso
+
+```{r}
+tabla_resumen_rdi <- base_analitica |>
+  dplyr::group_by(
+    anio
+  ) |>
+  dplyr::summarise(
+    hogares =
+      dplyr::n(),
+
+    hogares_con_deuda =
+      sum(
+        deuda_total > 0
+      ),
+
+    porcentaje_con_deuda =
+      100 *
+        mean(
+          deuda_total > 0
+        ),
+
+    deuda_mediana =
+      stats::median(
+        deuda_total,
+        na.rm = TRUE
+      ),
+
+    ingreso_mensual_mediano =
+      stats::median(
+        ingreso_efectivo_mensual,
+        na.rm = TRUE
+      ),
+
+    rdi_mediana_todos =
+      stats::median(
+        razon_deuda_ingreso,
+        na.rm = TRUE
+      ),
+
+    rdi_mediana_endeudados =
+      stats::median(
+        razon_deuda_ingreso[
+          deuda_total > 0
+        ],
+        na.rm = TRUE
+      ),
+
+    rdi_percentil_75_endeudados =
+      stats::quantile(
+        razon_deuda_ingreso[
+          deuda_total > 0
+        ],
+        probs = 0.75,
+        na.rm = TRUE,
+        names = FALSE
+      ),
+
+    .groups =
+      "drop"
+  )
+```
+
+```{r}
+knitr::kable(
+  tabla_resumen_rdi |>
+    dplyr::mutate(
+      porcentaje_con_deuda =
+        round(
+          porcentaje_con_deuda,
+          1
+        ),
+
+      dplyr::across(
+        dplyr::starts_with(
+          "rdi_"
+        ),
+        ~ round(
+          .x,
+          2
+        )
+      )
+    ),
+  format.args = list(
+    big.mark = ".",
+    decimal.mark = ","
+  ),
+  caption = "Resumen de deuda e ingreso en el panel analítico"
+)
+```
+
+# Distribución de estados por ola
+
+```{r}
+tabla_estados_ola <- base_analitica |>
+  dplyr::count(
+    anio,
+    estado_deuda,
+    name = "n",
+    .drop = FALSE
+  ) |>
+  dplyr::group_by(
+    anio
+  ) |>
+  dplyr::mutate(
+    porcentaje =
+      100 *
+        n /
+        sum(
+          n
+        )
+  ) |>
+  dplyr::ungroup()
+```
+
+```{r}
+knitr::kable(
+  tabla_estados_ola |>
+    dplyr::mutate(
+      porcentaje =
+        round(
+          porcentaje,
+          1
+        )
+    ),
+  caption = "Distribución no ponderada de estados de endeudamiento"
+)
+```
+
+# Figura 1. Estados de endeudamiento por ola
+
+```{r, fig.width=12.5, fig.height=7.2}
+figura_estados_ola <- ggplot2::ggplot(
+  tabla_estados_ola,
+  ggplot2::aes(
+    x =
+      factor(
+        anio
+      ),
+    y =
+      porcentaje,
+    fill =
+      estado_deuda
+  )
+) +
+  ggplot2::geom_col(
+    width = 0.66,
+    color = "white",
+    linewidth = 0.35
+  ) +
+  ggplot2::geom_text(
+    ggplot2::aes(
+      label =
+        dplyr::if_else(
+          porcentaje >= 5,
+          paste0(
+            round(
+              porcentaje,
+              1
+            ),
+            "%"
+          ),
+          ""
+        )
+    ),
+    position =
+      ggplot2::position_stack(
+        vjust = 0.5
+      ),
+    color =
+      "white",
+    fontface =
+      "bold",
+    size =
+      4
+  ) +
+  ggplot2::scale_fill_manual(
+    values =
+      paleta_deuda,
+    labels =
+      etiquetas_deuda_leyenda,
+    drop =
+      FALSE,
+    guide =
+      ggplot2::guide_legend(
+        nrow = 2,
+        byrow = TRUE
+      )
+  ) +
+  ggplot2::scale_y_continuous(
+    labels =
+      scales::label_percent(
+        scale = 1
+      ),
+    limits =
+      c(
+        0,
+        100
+      ),
+    expand =
+      ggplot2::expansion(
+        mult = c(
+          0,
+          0
+        )
+      )
+  ) +
+  ggplot2::labs(
+    title =
+      "Estados de endeudamiento en cada ola",
+
+    subtitle =
+      paste0(
+        "Deuda total respecto del ingreso efectivo anual · N = ",
+        dplyr::n_distinct(
+          base_analitica$panel_id
+        ),
+        " hogares"
+      ),
+
+    x =
+      NULL,
+
+    y =
+      "Porcentaje de hogares",
+
+    fill =
+      "Estado de deuda",
+
+    caption =
+      paste(
+        "Panel analítico balanceado.",
+        "Las barras describen la composición observada y no una estimación poblacional."
+      )
+  ) +
+  tema_taller() +
+  ggplot2::theme(
+    panel.grid.major.y =
+      ggplot2::element_line(
+        color = "grey88"
+      )
+  )
+
+figura_estados_ola
+```
+
+# Distribución continua de la razón deuda-ingreso
+
+```{r}
+limite_visual_rdi <- stats::quantile(
+  base_analitica$razon_deuda_ingreso[
+    base_analitica$deuda_total > 0
+  ],
+  probs = 0.95,
+  na.rm = TRUE,
+  names = FALSE
+)
+
+base_rdi_figura <- base_analitica |>
+  dplyr::filter(
+    deuda_total > 0,
+    razon_deuda_ingreso <=
+      limite_visual_rdi
+  )
+```
+
+# Figura 2. Distribución de deuda sobre ingreso
+
+```{r, fig.width=12.5, fig.height=7.2}
+figura_distribucion_rdi <- ggplot2::ggplot(
+  base_rdi_figura,
+  ggplot2::aes(
+    x =
+      razon_deuda_ingreso,
+    fill =
+      factor(
+        anio
+      )
+  )
+) +
+  ggplot2::geom_density(
+    alpha = 0.28,
+    linewidth = 0.9
+  ) +
+  ggplot2::geom_vline(
+    xintercept = limite_deuda_baja,
+    linetype = "dashed",
+    linewidth = 0.75,
+    color = color_mostaza_oscuro
+  ) +
+  ggplot2::geom_vline(
+    xintercept = limite_deuda_intermedia,
+    linetype = "dashed",
+    linewidth = 0.75,
+    color = color_morado_oscuro
+  ) +
+  ggplot2::annotate(
+    geom = "text",
+    x = limite_deuda_baja,
+    y = Inf,
+    label = "Límite deuda baja",
+    angle = 90,
+    vjust = 1.4,
+    hjust = 1.05,
+    size = 3.5,
+    color = color_mostaza_oscuro
+  ) +
+  ggplot2::annotate(
+    geom = "text",
+    x = limite_deuda_intermedia,
+    y = Inf,
+    label = "Límite deuda alta",
+    angle = 90,
+    vjust = 1.4,
+    hjust = 1.05,
+    size = 3.5,
+    color = color_morado_oscuro
+  ) +
+  ggplot2::scale_fill_manual(
+    values = c(
+      "2007" = color_mostaza,
+      "2011" = color_morado_claro,
+      "2014" = color_morado_oscuro
+    )
+  ) +
+  ggplot2::scale_x_continuous(
+    labels =
+      scales::label_number(
+        accuracy = 0.1,
+        decimal.mark = ","
+      ),
+    expand =
+      ggplot2::expansion(
+        mult = c(
+          0.01,
+          0.08
+        )
+      )
+  ) +
+  ggplot2::coord_cartesian(
+    clip = "off"
+  ) +
+  ggplot2::labs(
+    title =
+      "Distribución de deuda sobre ingreso entre hogares endeudados",
+
+    subtitle =
+      paste0(
+        "Visualización restringida al percentil 95: RDI ≤ ",
+        round(
+          limite_visual_rdi,
+          2
+        )
+      ),
+
+    x =
+      "Deuda total / ingreso efectivo anual",
+
+    y =
+      "Densidad",
+
+    fill =
+      "Año",
+
+    caption =
+      paste(
+        "Un valor de 1 indica que la deuda total equivale aproximadamente",
+        "a un año de ingreso efectivo del hogar."
+      )
+  ) +
+  tema_taller()
+
+figura_distribucion_rdi
+```
+
+# Base en formato ancho
+
+```{r}
+base_wide <- base_analitica |>
+  dplyr::select(
+    panel_id,
+    id,
+    anio,
+    estado_deuda,
+    nivel_deuda_numerico,
+    razon_deuda_ingreso
+  ) |>
+  tidyr::pivot_wider(
+    names_from =
+      anio,
+
+    values_from =
+      c(
+        id,
+        estado_deuda,
+        nivel_deuda_numerico,
+        razon_deuda_ingreso
+      ),
+
+    names_sep =
+      "_"
+  )
+```
+
+```{r}
+variables_estado_esperadas <- paste0(
+  "estado_deuda_",
+  anios_analisis
+)
+
+if (
+  !all(
+    variables_estado_esperadas %in%
+      names(
+        base_wide
+      )
+  )
+) {
+
+  stop(
+    paste0(
+      "No fue posible crear los estados para las tres olas. ",
+      "Columnas esperadas: ",
+      paste(
+        variables_estado_esperadas,
+        collapse = ", "
+      )
+    )
+  )
+}
+```
+
+# Matrices de transición
+
+## Función de transición
+
+```{r}
+calcular_transicion <- function(
+    datos,
+    anio_inicial,
+    anio_final
+) {
+
+  variable_inicial <- paste0(
+    "estado_deuda_",
+    anio_inicial
+  )
+
+  variable_final <- paste0(
+    "estado_deuda_",
+    anio_final
+  )
+
+  datos |>
+    dplyr::count(
+      estado_inicial =
+        .data[[
+          variable_inicial
+        ]],
+
+      estado_final =
+        .data[[
+          variable_final
+        ]],
+
+      name =
+        "n",
+
+      .drop =
+        FALSE
+    ) |>
+    dplyr::group_by(
+      estado_inicial
+    ) |>
+    dplyr::mutate(
+      total_estado_inicial =
+        sum(
+          n
+        ),
+
+      porcentaje_fila =
+        100 *
+          n /
+          total_estado_inicial
+    ) |>
+    dplyr::ungroup() |>
+    dplyr::mutate(
+      periodo =
+        paste0(
+          anio_inicial,
+          "–",
+          anio_final
+        ),
+      .before = 1
+    )
+}
+```
+
+```{r}
+tabla_transicion_2007_2011 <- calcular_transicion(
+  datos = base_wide,
+  anio_inicial = 2007,
+  anio_final = 2011
+)
+
+tabla_transicion_2011_2014 <- calcular_transicion(
+  datos = base_wide,
+  anio_inicial = 2011,
+  anio_final = 2014
+)
+
+tabla_transicion_2007_2014 <- calcular_transicion(
+  datos = base_wide,
+  anio_inicial = 2007,
+  anio_final = 2014
+)
+```
+
+## Matriz 2007–2011
+
+```{r}
+knitr::kable(
+  tabla_transicion_2007_2011 |>
+    dplyr::mutate(
+      porcentaje_fila =
+        round(
+          porcentaje_fila,
+          1
+        )
+    ),
+  caption = "Transiciones entre estados de deuda, 2007–2011"
+)
+```
+
+## Matriz 2011–2014
+
+```{r}
+knitr::kable(
+  tabla_transicion_2011_2014 |>
+    dplyr::mutate(
+      porcentaje_fila =
+        round(
+          porcentaje_fila,
+          1
+        )
+    ),
+  caption = "Transiciones entre estados de deuda, 2011–2014"
+)
+```
+
+## Matriz 2007–2014
+
+```{r}
+knitr::kable(
+  tabla_transicion_2007_2014 |>
+    dplyr::mutate(
+      porcentaje_fila =
+        round(
+          porcentaje_fila,
+          1
+        )
+    ),
+  caption = "Transiciones entre estados de deuda, 2007–2014"
+)
+```
+
+# Permanencia en el mismo estado
+
+```{r}
+tabla_permanencia_general <- base_wide |>
+  dplyr::summarise(
+    hogares =
+      dplyr::n(),
+
+    porcentaje_mismo_estado_2007_2011 =
+      100 *
+        mean(
+          estado_deuda_2007 ==
+            estado_deuda_2011
+        ),
+
+    porcentaje_mismo_estado_2011_2014 =
+      100 *
+        mean(
+          estado_deuda_2011 ==
+            estado_deuda_2014
+        ),
+
+    porcentaje_mismo_estado_2007_2014 =
+      100 *
+        mean(
+          estado_deuda_2007 ==
+            estado_deuda_2014
+        ),
+
+    porcentaje_mismo_estado_tres_olas =
+      100 *
+        mean(
+          estado_deuda_2007 ==
+            estado_deuda_2011 &
+          estado_deuda_2011 ==
+            estado_deuda_2014
+        )
+  )
+```
+
+```{r}
+knitr::kable(
+  tabla_permanencia_general,
+  digits = 1,
+  caption = "Permanencia general en los estados de endeudamiento"
+)
+```
+
+# Permanencia según estado inicial
+
+```{r}
+tabla_permanencia_origen <- base_wide |>
+  dplyr::mutate(
+    mismo_estado_2014 =
+      estado_deuda_2007 ==
+        estado_deuda_2014
+  ) |>
+  dplyr::group_by(
+    estado_inicial =
+      estado_deuda_2007
+  ) |>
+  dplyr::summarise(
+    hogares_iniciales =
+      dplyr::n(),
+
+    hogares_mismo_estado =
+      sum(
+        mismo_estado_2014
+      ),
+
+    porcentaje_mismo_estado =
+      100 *
+        mean(
+          mismo_estado_2014
+        ),
+
+    .groups =
+      "drop"
+  ) |>
+  dplyr::mutate(
+    estado_inicial =
+      factor(
+        estado_inicial,
+        levels = niveles_deuda,
+        ordered = TRUE
+      )
+  )
+```
+
+# Figura 3. Permanencia según estado inicial
+
+```{r, fig.width=12.5, fig.height=6.8}
+figura_permanencia <- ggplot2::ggplot(
+  tabla_permanencia_origen,
+  ggplot2::aes(
+    x =
+      porcentaje_mismo_estado,
+
+    y =
+      forcats::fct_rev(
+        estado_inicial
+      ),
+
+    fill =
+      estado_inicial
+  )
+) +
+  ggplot2::geom_col(
+    width = 0.64
+  ) +
+  ggplot2::geom_text(
+    ggplot2::aes(
+      label =
+        paste0(
+          round(
+            porcentaje_mismo_estado,
+            1
+          ),
+          "%"
+        )
+    ),
+    hjust =
+      -0.18,
+    size =
+      4,
+    fontface =
+      "bold"
+  ) +
+  ggplot2::scale_fill_manual(
+    values =
+      paleta_deuda,
+    drop =
+      FALSE
+  ) +
+  ggplot2::scale_x_continuous(
+    labels =
+      scales::label_percent(
+        scale = 1
+      ),
+    limits =
+      c(
+        0,
+        100
+      ),
+    expand =
+      ggplot2::expansion(
+        mult = c(
+          0,
+          0.05
+        )
+      )
+  ) +
+  ggplot2::coord_cartesian(
+    clip = "off"
+  ) +
+  ggplot2::labs(
+    title =
+      "Persistencia del endeudamiento entre 2007 y 2014",
+
+    subtitle =
+      "Porcentaje que termina en el mismo estado en que comenzó",
+
+    x =
+      "Porcentaje de permanencia",
+
+    y =
+      NULL,
+
+    caption =
+      paste0(
+        "Panel analítico balanceado: N = ",
+        nrow(
+          base_wide
+        ),
+        " hogares."
+      )
+  ) +
+  tema_taller() +
+  ggplot2::theme(
+    panel.grid.major.y =
+      ggplot2::element_blank(),
+
+    legend.position =
+      "none",
+
+    axis.text.y =
+      ggplot2::element_text(
+        size = 11
+      )
+  )
+
+figura_permanencia
+```
+
+# Dirección de los cambios
+
+```{r}
+base_wide <- base_wide |>
+  dplyr::mutate(
+    diferencia_nivel =
+      nivel_deuda_numerico_2014 -
+        nivel_deuda_numerico_2007,
+
+    direccion_cambio =
+      dplyr::case_when(
+        diferencia_nivel < 0 ~
+          "Disminuyó",
+
+        diferencia_nivel == 0 ~
+          "Permaneció",
+
+        diferencia_nivel > 0 ~
+          "Aumentó",
+
+        TRUE ~
+          NA_character_
+      ),
+
+    direccion_cambio =
+      factor(
+        direccion_cambio,
+        levels = niveles_direccion
+      )
+  )
+
+tabla_direccion_cambio <- base_wide |>
+  dplyr::count(
+    direccion_cambio,
+    name = "n",
+    .drop = FALSE
+  ) |>
+  dplyr::mutate(
+    porcentaje =
+      100 *
+        n /
+        sum(
+          n
+        )
+  )
+```
+
+```{r}
+knitr::kable(
+  tabla_direccion_cambio |>
+    dplyr::mutate(
+      porcentaje =
+        round(
+          porcentaje,
+          1
+        )
+    ),
+  caption = "Dirección del cambio en el nivel de endeudamiento, 2007–2014"
+)
+```
+
+# Figura 4. Dirección del cambio
+
+```{r, fig.width=12.5, fig.height=6.5}
+figura_direccion <- ggplot2::ggplot(
+  tabla_direccion_cambio,
+  ggplot2::aes(
+    x =
+      porcentaje,
+
+    y =
+      forcats::fct_rev(
+        direccion_cambio
+      ),
+
+    fill =
+      direccion_cambio
+  )
+) +
+  ggplot2::geom_col(
+    width = 0.64
+  ) +
+  ggplot2::geom_text(
+    ggplot2::aes(
+      label =
+        paste0(
+          round(
+            porcentaje,
+            1
+          ),
+          "%"
+        )
+    ),
+    hjust =
+      -0.18,
+    size =
+      4,
+    fontface =
+      "bold"
+  ) +
+  ggplot2::scale_fill_manual(
+    values =
+      paleta_direccion_composicion,
+    drop =
+      FALSE
+  ) +
+  ggplot2::scale_x_continuous(
+    labels =
+      scales::label_percent(
+        scale = 1
+      ),
+    limits =
+      c(
+        0,
+        100
+      ),
+    expand =
+      ggplot2::expansion(
+        mult = c(
+          0,
+          0.05
+        )
+      )
+  ) +
+  ggplot2::coord_cartesian(
+    clip = "off"
+  ) +
+  ggplot2::labs(
+    title =
+      "Dirección del cambio entre 2007 y 2014",
+
+    subtitle =
+      "Comparación del estado de deuda inicial y final",
+
+    x =
+      "Porcentaje de hogares",
+
+    y =
+      NULL,
+
+    caption =
+      paste0(
+        "Panel analítico balanceado: N = ",
+        nrow(
+          base_wide
+        ),
+        " hogares."
+      )
+  ) +
+  tema_taller() +
+  ggplot2::theme(
+    panel.grid.major.y =
+      ggplot2::element_blank(),
+
+    legend.position =
+      "none",
+
+    axis.text.y =
+      ggplot2::element_text(
+        size = 11
+      )
+  )
+
+figura_direccion
+```
+
+# Género, situación de pareja y transiciones
+
+La comparación general por género de la persona de referencia produce
+distribuciones muy similares. Para observar configuraciones más específicas se
+incorpora también la situación de pareja de la persona de referencia observada
+en 2014.
+
+Esta clasificación se mide al final del periodo. Por tanto, no debe
+interpretarse como una condición inicial ni como una causa de la trayectoria.
+
+## Lectura de la base EFH 2014
+
+```{r}
+efh_2014_original <- haven::read_dta(
+  ruta_efh_2014
+) |>
+  tibble::as_tibble()
+
+variables_2014_requeridas <- c(
+  "id",
+  "genero_pr",
+  "est_civil_pr"
+)
+
+variables_2014_faltantes <- setdiff(
+  variables_2014_requeridas,
+  names(
+    efh_2014_original
+  )
+)
+
+if (
+  length(
+    variables_2014_faltantes
+  ) > 0
+) {
+
+  stop(
+    paste0(
+      "La base EFH 2014 no contiene las siguientes variables:\n",
+      paste(
+        variables_2014_faltantes,
+        collapse = ", "
+      )
+    )
+  )
+}
+```
+
+## Preparación de la persona de referencia
+
+```{r}
+base_persona_referencia_2014 <- efh_2014_original |>
+  dplyr::transmute(
+    id =
+      as.character(
+        id
+      ),
+
+    genero_pr_original =
+      convertir_etiquetado_a_texto(
+        genero_pr
+      ),
+
+    estado_civil_pr_original =
+      convertir_etiquetado_a_texto(
+        est_civil_pr
+      )
+  ) |>
+  dplyr::mutate(
+    genero_pr_normalizado =
+      normalizar_texto(
+        genero_pr_original
+      ),
+
+    estado_civil_pr_normalizado =
+      normalizar_texto(
+        estado_civil_pr_original
+      )
+  ) |>
+  dplyr::group_by(
+    id
+  ) |>
+  dplyr::summarise(
+    genero_pr_original =
+      primer_valor_valido(
+        genero_pr_original
+      ),
+
+    estado_civil_pr_original =
+      primer_valor_valido(
+        estado_civil_pr_original
+      ),
+
+    genero_pr_normalizado =
+      primer_valor_valido(
+        genero_pr_normalizado
+      ),
+
+    estado_civil_pr_normalizado =
+      primer_valor_valido(
+        estado_civil_pr_normalizado
+      ),
+
+    .groups =
+      "drop"
+  ) |>
+  dplyr::mutate(
+    genero_persona_referencia =
+      dplyr::case_when(
+        stringr::str_detect(
+          genero_pr_normalizado,
+          "^mujer$|femen"
+        ) ~
+          "Mujer",
+
+        stringr::str_detect(
+          genero_pr_normalizado,
+          "^hombre$|mascul"
+        ) ~
+          "Hombre",
+
+        TRUE ~
+          NA_character_
+      ),
+
+    situacion_pareja =
+      dplyr::case_when(
+        stringr::str_detect(
+          estado_civil_pr_normalizado,
+          "casad|conviv"
+        ) ~
+          "Con pareja",
+
+        !is.na(
+          estado_civil_pr_normalizado
+        ) &
+          estado_civil_pr_normalizado != "" ~
+          "Sin pareja",
+
+        TRUE ~
+          NA_character_
+      ),
+
+    grupo_genero_pareja =
+      dplyr::case_when(
+        genero_persona_referencia == "Mujer" &
+          situacion_pareja == "Sin pareja" ~
+          "Mujer sin pareja",
+
+        genero_persona_referencia == "Mujer" &
+          situacion_pareja == "Con pareja" ~
+          "Mujer con pareja",
+
+        genero_persona_referencia == "Hombre" &
+          situacion_pareja == "Sin pareja" ~
+          "Hombre sin pareja",
+
+        genero_persona_referencia == "Hombre" &
+          situacion_pareja == "Con pareja" ~
+          "Hombre con pareja",
+
+        TRUE ~
+          NA_character_
+      ),
+
+    grupo_genero_pareja =
+      factor(
+        grupo_genero_pareja,
+        levels = c(
+          "Mujer sin pareja",
+          "Mujer con pareja",
+          "Hombre sin pareja",
+          "Hombre con pareja"
+        )
+      )
+  )
+```
+
+## Unión con el panel analítico
+
+```{r}
+base_wide <- base_wide |>
+  dplyr::left_join(
+    base_persona_referencia_2014 |>
+      dplyr::select(
+        id,
+        genero_persona_referencia,
+        situacion_pareja,
+        grupo_genero_pareja
+      ),
+    by = c(
+      "id_2014" = "id"
+    )
+  )
+```
+
+## Auditoría de la unión
+
+```{r}
+tabla_union_persona_referencia <- tibble::tibble(
+  indicador = c(
+    "Hogares del panel analítico",
+    "Hogares con ID válido en 2014",
+    "Hogares con género de referencia válido",
+    "Hogares con situación de pareja válida",
+    "Hogares con clasificación conjunta válida",
+    "Porcentaje con clasificación conjunta válida"
+  ),
+
+  valor = c(
+    nrow(
+      base_wide
+    ),
+
+    sum(
+      !is.na(
+        base_wide$id_2014
+      ) &
+        base_wide$id_2014 != ""
+    ),
+
+    sum(
+      !is.na(
+        base_wide$genero_persona_referencia
+      )
+    ),
+
+    sum(
+      !is.na(
+        base_wide$situacion_pareja
+      )
+    ),
+
+    sum(
+      !is.na(
+        base_wide$grupo_genero_pareja
+      )
+    ),
+
+    100 *
+      mean(
+        !is.na(
+          base_wide$grupo_genero_pareja
+        )
+      )
+  )
+)
+
+knitr::kable(
+  tabla_union_persona_referencia |>
+    dplyr::mutate(
+      valor =
+        round(
+          valor,
+          1
+        )
+    ),
+  caption = "Cobertura de las variables de persona de referencia"
+)
+```
+
+## Dirección del cambio según composición
+
+```{r}
+tabla_direccion_genero_pareja <- base_wide |>
+  dplyr::filter(
+    !is.na(
+      grupo_genero_pareja
+    ),
+    !is.na(
+      direccion_cambio
+    )
+  ) |>
+  dplyr::count(
+    grupo_genero_pareja,
+    direccion_cambio,
+    name = "n",
+    .drop = FALSE
+  ) |>
+  dplyr::group_by(
+    grupo_genero_pareja
+  ) |>
+  dplyr::mutate(
+    n_grupo =
+      sum(
+        n
+      ),
+
+    porcentaje =
+      100 *
+        n /
+        n_grupo
+  ) |>
+  dplyr::ungroup()
+```
+
+```{r}
+knitr::kable(
+  tabla_direccion_genero_pareja |>
+    dplyr::mutate(
+      porcentaje =
+        round(
+          porcentaje,
+          1
+        )
+    ),
+  caption = paste(
+    "Dirección del cambio según género y situación de pareja",
+    "de la persona de referencia en 2014"
+  )
+)
+```
+
+# Figura 5. Transiciones según género y situación de pareja
+
+```{r, fig.width=12.5, fig.height=7.4}
+etiquetas_grupos_composicion <- tabla_direccion_genero_pareja |>
+  dplyr::distinct(
+    grupo_genero_pareja,
+    n_grupo
+  ) |>
+  dplyr::mutate(
+    etiqueta =
+      paste0(
+        as.character(
+          grupo_genero_pareja
+        ),
+        " (n = ",
+        n_grupo,
+        ")"
+      )
+  )
+
+vector_etiquetas_grupos <- stats::setNames(
+  etiquetas_grupos_composicion$etiqueta,
+  as.character(
+    etiquetas_grupos_composicion$grupo_genero_pareja
+  )
+)
+
+figura_direccion_genero_pareja <- ggplot2::ggplot(
+  tabla_direccion_genero_pareja,
+  ggplot2::aes(
+    x =
+      porcentaje,
+
+    y =
+      grupo_genero_pareja,
+
+    fill =
+      direccion_cambio
+  )
+) +
+  ggplot2::geom_col(
+    width = 0.64,
+    position =
+      ggplot2::position_stack(
+        reverse = TRUE
+      )
+  ) +
+  ggplot2::geom_text(
+    ggplot2::aes(
+      label =
+        dplyr::if_else(
+          porcentaje >= 6,
+          paste0(
+            round(
+              porcentaje,
+              1
+            ),
+            "%"
+          ),
+          ""
+        )
+    ),
+    position =
+      ggplot2::position_stack(
+        vjust = 0.5,
+        reverse = TRUE
+      ),
+    color =
+      color_texto,
+    fontface =
+      "bold",
+    size =
+      4
+  ) +
+  ggplot2::scale_fill_manual(
+    values =
+      paleta_direccion_composicion,
+
+    breaks =
+      niveles_direccion,
+
+    limits =
+      niveles_direccion,
+
+    labels =
+      niveles_direccion,
+
+    drop =
+      FALSE,
+
+    guide =
+      ggplot2::guide_legend(
+        nrow = 1,
+        byrow = TRUE
+      )
+  ) +
+  ggplot2::scale_y_discrete(
+    labels =
+      vector_etiquetas_grupos
+  ) +
+  ggplot2::scale_x_continuous(
+    labels =
+      scales::label_percent(
+        scale = 1,
+        accuracy = 1
+      ),
+    limits =
+      c(
+        0,
+        100
+      ),
+    breaks =
+      seq(
+        0,
+        100,
+        20
+      ),
+    expand =
+      ggplot2::expansion(
+        mult = c(
+          0,
+          0
+        )
+      )
+  ) +
+  ggplot2::labs(
+    title =
+      "Transiciones de endeudamiento según género y situación de pareja",
+
+    subtitle =
+      paste(
+        "Dirección del cambio entre 2007 y 2014, según características",
+        "de la persona de referencia observadas en 2014"
+      ),
+
+    x =
+      "Porcentaje dentro de cada grupo",
+
+    y =
+      NULL,
+
+    fill =
+      "Dirección del cambio",
+
+    caption =
+      paste(
+        "Panel analítico balanceado. Comparación descriptiva no ponderada.",
+        "Con pareja incluye personas casadas o convivientes.",
+        "Las características del hogar se observan al final del periodo."
+      )
+  ) +
+  tema_taller(
+    tamano_base = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.major.y =
+      ggplot2::element_blank(),
+
+    panel.grid.major.x =
+      ggplot2::element_line(
+        color = "grey88"
+      ),
+
+    axis.text.y =
+      ggplot2::element_text(
+        face = "bold",
+        size = 11
+      ),
+
+    legend.position =
+      "bottom"
+  )
+
+figura_direccion_genero_pareja
+```
+
+## Lectura descriptiva
+
+La comparación general por género de la persona de referencia muestra pocas
+diferencias. Al incorporar la situación de pareja aparece mayor heterogeneidad
+entre las mujeres.
+
+Los hogares con una persona de referencia mujer sin pareja presentan una
+proporción mayor de aumento del nivel relativo de deuda que aquellos con una
+mujer con pareja. Entre los hombres, las diferencias según situación de pareja
+son considerablemente menores.
+
+La comparación es descriptiva. La clasificación del hogar se observa en 2014 y
+no permite atribuir causalmente la trayectoria a su composición.
+
+# Trayectorias completas
+
+```{r}
+tabla_trayectorias <- base_wide |>
+  dplyr::count(
+    estado_deuda_2007,
+    estado_deuda_2011,
+    estado_deuda_2014,
+    name = "n"
+  ) |>
+  dplyr::mutate(
+    porcentaje =
+      100 *
+        n /
+        sum(
+          n
+        ),
+
+    trayectoria =
+      paste(
+        estado_deuda_2007,
+        estado_deuda_2011,
+        estado_deuda_2014,
+        sep = " → "
+      )
+  ) |>
+  dplyr::arrange(
+    dplyr::desc(
+      n
+    )
+  )
+```
+
+```{r}
+knitr::kable(
+  tabla_trayectorias |>
+    dplyr::slice_head(
+      n = 15
+    ) |>
+    dplyr::mutate(
+      porcentaje =
+        round(
+          porcentaje,
+          1
+        )
+    ),
+  caption = "Quince trayectorias de endeudamiento más frecuentes"
+)
+```
+
+# Preparación del gráfico alluvial
+
+```{r}
+trayectorias_alluvial <- tabla_trayectorias |>
+  dplyr::mutate(
+    trayectoria_id =
+      trayectoria,
+
+    destino_2014 =
+      factor(
+        estado_deuda_2014,
+        levels = niveles_deuda,
+        ordered = TRUE
+      )
+  )
+```
+
+```{r}
+trayectorias_long <- trayectorias_alluvial |>
+  dplyr::select(
+    trayectoria_id,
+    n,
+    destino_2014,
+    `2007` =
+      estado_deuda_2007,
+    `2011` =
+      estado_deuda_2011,
+    `2014` =
+      estado_deuda_2014
+  ) |>
+  tidyr::pivot_longer(
+    cols = c(
+      `2007`,
+      `2011`,
+      `2014`
+    ),
+    names_to = "ola",
+    values_to = "estado_deuda"
+  ) |>
+  dplyr::mutate(
+    ola =
+      factor(
+        ola,
+        levels = c(
+          "2007",
+          "2011",
+          "2014"
+        )
+      ),
+
+    estado_deuda =
+      factor(
+        estado_deuda,
+        levels = niveles_deuda,
+        ordered = TRUE
+      )
+  )
+```
+
+# Figura 6. Trayectorias alluviales
+
+```{r, fig.width=14, fig.height=9}
+figura_alluvial <- ggplot2::ggplot(
+  trayectorias_long,
+  ggplot2::aes(
+    x =
+      ola,
+
+    stratum =
+      estado_deuda,
+
+    alluvium =
+      trayectoria_id,
+
+    y =
+      n
+  )
+) +
+  ggalluvial::geom_flow(
+    ggplot2::aes(
+      fill =
+        destino_2014
+    ),
+    stat =
+      "alluvium",
+    alpha =
+      0.76,
+    color =
+      "white",
+    linewidth =
+      0.18,
+    knot.pos =
+      0.42
+  ) +
+  ggalluvial::geom_stratum(
+    ggplot2::aes(
+      fill =
+        estado_deuda
+    ),
+    color =
+      "white",
+    linewidth =
+      0.9,
+    width =
+      0.20
+  ) +
+  ggplot2::geom_text(
+    stat =
+      "stratum",
+    ggplot2::aes(
+      label =
+        after_stat(
+          stratum
+        )
+    ),
+    color =
+      "white",
+    fontface =
+      "bold",
+    size =
+      3.2,
+    lineheight =
+      0.9
+  ) +
+  ggplot2::scale_fill_manual(
+    values =
+      paleta_deuda,
+    labels =
+      etiquetas_deuda_leyenda,
+    drop =
+      FALSE,
+    guide =
+      ggplot2::guide_legend(
+        nrow = 2,
+        byrow = TRUE
+      )
+  ) +
+  ggplot2::scale_x_discrete(
+    expand = c(
+      0.11,
+      0.11
+    )
+  ) +
+  ggplot2::scale_y_continuous(
+    expand =
+      ggplot2::expansion(
+        mult = c(
+          0.02,
+          0.04
+        )
+      )
+  ) +
+  ggplot2::coord_cartesian(
+    clip = "off"
+  ) +
+  ggplot2::labs(
+    title =
+      "Trayectorias de endeudamiento de los hogares",
+
+    subtitle =
+      paste0(
+        "Flujos agregados entre 2007, 2011 y 2014 · N = ",
+        nrow(
+          base_wide
+        )
+      ),
+
+    x =
+      NULL,
+
+    y =
+      "Número de hogares",
+
+    fill =
+      "Estado alcanzado en 2014",
+
+    caption =
+      paste(
+        "El ancho de cada flujo representa el número de hogares.",
+        "El color del flujo corresponde al estado observado en 2014."
+      )
+  ) +
+  tema_taller(
+    tamano_base = 12
+  ) +
+  ggplot2::theme(
+    panel.grid =
+      ggplot2::element_blank(),
+
+    axis.text.x =
+      ggplot2::element_text(
+        face = "bold",
+        size = 12
+      ),
+
+    axis.text.y =
+      ggplot2::element_blank(),
+
+    axis.ticks.y =
+      ggplot2::element_blank(),
+
+    legend.position =
+      "bottom",
+
+    plot.margin =
+      ggplot2::margin(
+        t = 18,
+        r = 16,
+        b = 22,
+        l = 16
+      )
+  )
+
+figura_alluvial
+```
+
+# Probabilidad de terminar en deuda alta
+
+```{r}
+tabla_riesgo_final <- base_wide |>
+  dplyr::group_by(
+    estado_inicial =
+      estado_deuda_2007
+  ) |>
+  dplyr::summarise(
+    hogares_iniciales =
+      dplyr::n(),
+
+    hogares_deuda_alta_2014 =
+      sum(
+        estado_deuda_2014 ==
+          "Deuda alta"
+      ),
+
+    porcentaje_deuda_alta_2014 =
+      100 *
+        mean(
+          estado_deuda_2014 ==
+            "Deuda alta"
+        ),
+
+    hogares_sin_deuda_2014 =
+      sum(
+        estado_deuda_2014 ==
+          "Sin deuda"
+      ),
+
+    porcentaje_sin_deuda_2014 =
+      100 *
+        mean(
+          estado_deuda_2014 ==
+            "Sin deuda"
+        ),
+
+    .groups =
+      "drop"
+  ) |>
+  dplyr::mutate(
+    estado_inicial =
+      factor(
+        estado_inicial,
+        levels = niveles_deuda,
+        ordered = TRUE
+      )
+  )
+```
+
+```{r}
+knitr::kable(
+  tabla_riesgo_final |>
+    dplyr::mutate(
+      porcentaje_deuda_alta_2014 =
+        round(
+          porcentaje_deuda_alta_2014,
+          1
+        ),
+
+      porcentaje_sin_deuda_2014 =
+        round(
+          porcentaje_sin_deuda_2014,
+          1
+        )
+    ),
+  caption = "Resultados en 2014 según el estado de endeudamiento en 2007"
+)
+```
+
+# Figura 7. Deuda alta en 2014 según estado inicial
+
+```{r, fig.width=12.5, fig.height=6.8}
+figura_riesgo_final <- ggplot2::ggplot(
+  tabla_riesgo_final,
+  ggplot2::aes(
+    x =
+      porcentaje_deuda_alta_2014,
+
+    y =
+      forcats::fct_rev(
+        estado_inicial
+      ),
+
+    fill =
+      estado_inicial
+  )
+) +
+  ggplot2::geom_col(
+    width = 0.64
+  ) +
+  ggplot2::geom_text(
+    ggplot2::aes(
+      label =
+        paste0(
+          round(
+            porcentaje_deuda_alta_2014,
+            1
+          ),
+          "%"
+        )
+    ),
+    hjust =
+      -0.18,
+    size =
+      4,
+    fontface =
+      "bold"
+  ) +
+  ggplot2::scale_fill_manual(
+    values =
+      paleta_deuda,
+    drop =
+      FALSE
+  ) +
+  ggplot2::scale_x_continuous(
+    labels =
+      scales::label_percent(
+        scale = 1
+      ),
+    limits =
+      c(
+        0,
+        100
+      ),
+    expand =
+      ggplot2::expansion(
+        mult = c(
+          0,
+          0.05
+        )
+      )
+  ) +
+  ggplot2::coord_cartesian(
+    clip = "off"
+  ) +
+  ggplot2::labs(
+    title =
+      "Probabilidad descriptiva de terminar en deuda alta",
+
+    subtitle =
+      "Resultado en 2014 según el estado observado en 2007",
+
+    x =
+      "Porcentaje que termina en deuda alta",
+
+    y =
+      NULL,
+
+    caption =
+      paste(
+        "Porcentajes descriptivos del panel analítico.",
+        "No corresponden a efectos causales ni a probabilidades ajustadas."
+      )
+  ) +
+  tema_taller() +
+  ggplot2::theme(
+    panel.grid.major.y =
+      ggplot2::element_blank(),
+
+    legend.position =
+      "none",
+
+    axis.text.y =
+      ggplot2::element_text(
+        size = 11
+      )
+  )
+
+figura_riesgo_final
+```
+
+# Comparación de ponderaciones transversales
+
+```{r}
+tabla_estados_ponderada <- base_analitica |>
+  dplyr::group_by(
+    anio,
+    estado_deuda
+  ) |>
+  dplyr::summarise(
+    frecuencia_ponderada =
+      sum(
+        ponderador,
+        na.rm = TRUE
+      ),
+    .groups =
+      "drop"
+  ) |>
+  dplyr::group_by(
+    anio
+  ) |>
+  dplyr::mutate(
+    porcentaje_ponderado =
+      100 *
+        frecuencia_ponderada /
+        sum(
+          frecuencia_ponderada
+        )
+  ) |>
+  dplyr::ungroup()
+```
+
+```{r}
+tabla_comparacion_ponderacion <- tabla_estados_ola |>
+  dplyr::select(
+    anio,
+    estado_deuda,
+    porcentaje_no_ponderado =
+      porcentaje
+  ) |>
+  dplyr::left_join(
+    tabla_estados_ponderada |>
+      dplyr::select(
+        anio,
+        estado_deuda,
+        porcentaje_ponderado
+      ),
+    by = c(
+      "anio",
+      "estado_deuda"
+    )
+  )
+```
+
+```{r}
+knitr::kable(
+  tabla_comparacion_ponderacion |>
+    dplyr::mutate(
+      porcentaje_no_ponderado =
+        round(
+          porcentaje_no_ponderado,
+          1
+        ),
+
+      porcentaje_ponderado =
+        round(
+          porcentaje_ponderado,
+          1
+        )
+    ),
+  caption = "Distribución no ponderada y ponderada transversalmente"
+)
+```
+
+# Exportación de figuras
+
+```{r}
+especificaciones_figuras <- tibble::tribble(
+  ~nombre, ~ancho, ~alto,
+  "07_01_estados_deuda_por_ola", 12.5, 7.2,
+  "07_02_distribucion_rdi", 12.5, 7.2,
+  "07_03_permanencia_por_origen", 12.5, 6.8,
+  "07_04_direccion_cambio", 12.5, 6.5,
+  "07_05_direccion_genero_pareja_2014", 12.5, 7.4,
+  "07_06_trayectorias_alluvial", 14.0, 9.0,
+  "07_07_deuda_alta_segun_origen", 12.5, 6.8
+)
+
+figuras_exportar <- list(
+  "07_01_estados_deuda_por_ola" =
+    figura_estados_ola,
+
+  "07_02_distribucion_rdi" =
+    figura_distribucion_rdi,
+
+  "07_03_permanencia_por_origen" =
+    figura_permanencia,
+
+  "07_04_direccion_cambio" =
+    figura_direccion,
+
+  "07_05_direccion_genero_pareja_2014" =
+    figura_direccion_genero_pareja,
+
+  "07_06_trayectorias_alluvial" =
+    figura_alluvial,
+
+  "07_07_deuda_alta_segun_origen" =
+    figura_riesgo_final
+)
+```
+
+```{r}
+for (
+  nombre_figura in
+  names(
+    figuras_exportar
+  )
+) {
+
+  especificacion <- especificaciones_figuras |>
+    dplyr::filter(
+      nombre ==
+        nombre_figura
+    )
+
+  ancho_figura <- especificacion$ancho[[1]]
+
+  alto_figura <- especificacion$alto[[1]]
+
+  ggplot2::ggsave(
+    filename = file.path(
+      ruta_figuras,
+      paste0(
+        nombre_figura,
+        ".png"
+      )
+    ),
+    plot =
+      figuras_exportar[[
+        nombre_figura
+      ]],
+    width =
+      ancho_figura,
+    height =
+      alto_figura,
+    units =
+      "in",
+    dpi =
+      320,
+    bg =
+      "white",
+    limitsize =
+      FALSE
+  )
+
+  ggplot2::ggsave(
+    filename = file.path(
+      ruta_figuras,
+      paste0(
+        nombre_figura,
+        ".svg"
+      )
+    ),
+    plot =
+      figuras_exportar[[
+        nombre_figura
+      ]],
+    width =
+      ancho_figura,
+    height =
+      alto_figura,
+    units =
+      "in",
+    bg =
+      "white",
+    limitsize =
+      FALSE
+  )
+}
+```
+
+# Exportación de tablas CSV
+
+```{r}
+tablas_csv <- list(
+  "07_01_cobertura.csv" =
+    tabla_cobertura,
+
+  "07_02_muestra_analitica.csv" =
+    tabla_muestra,
+
+  "07_03_resumen_rdi.csv" =
+    tabla_resumen_rdi,
+
+  "07_04_estados_por_ola.csv" =
+    tabla_estados_ola,
+
+  "07_05_transicion_2007_2011.csv" =
+    tabla_transicion_2007_2011,
+
+  "07_06_transicion_2011_2014.csv" =
+    tabla_transicion_2011_2014,
+
+  "07_07_transicion_2007_2014.csv" =
+    tabla_transicion_2007_2014,
+
+  "07_08_permanencia_general.csv" =
+    tabla_permanencia_general,
+
+  "07_09_permanencia_origen.csv" =
+    tabla_permanencia_origen,
+
+  "07_10_direccion_cambio.csv" =
+    tabla_direccion_cambio,
+
+  "07_11_trayectorias.csv" =
+    tabla_trayectorias,
+
+  "07_12_resultado_final_segun_origen.csv" =
+    tabla_riesgo_final,
+
+  "07_13_comparacion_ponderacion.csv" =
+    tabla_comparacion_ponderacion,
+
+  "07_14_id_panel_por_anio.csv" =
+    tabla_id_panel,
+
+  "07_15_union_persona_referencia.csv" =
+    tabla_union_persona_referencia,
+
+  "07_16_direccion_genero_pareja.csv" =
+    tabla_direccion_genero_pareja
+)
+```
+
+```{r}
+purrr::iwalk(
+  tablas_csv,
+  function(
+      tabla,
+      nombre_archivo
+  ) {
+
+    readr::write_csv(
+      hacer_exportable(
+        tabla
+      ),
+      file.path(
+        ruta_tablas,
+        nombre_archivo
+      ),
+      na = ""
+    )
+  }
+)
+```
+
+# Libro Excel consolidado
+
+```{r}
+archivo_excel <- file.path(
+  ruta_tablas,
+  "07_transiciones_deuda_ingreso.xlsx"
+)
+
+tablas_excel <- list(
+  "Cobertura" =
+    tabla_cobertura,
+
+  "Muestra analítica" =
+    tabla_muestra,
+
+  "Resumen RDI" =
+    tabla_resumen_rdi,
+
+  "Estados por ola" =
+    tabla_estados_ola,
+
+  "Transición 2007 2011" =
+    tabla_transicion_2007_2011,
+
+  "Transición 2011 2014" =
+    tabla_transicion_2011_2014,
+
+  "Transición 2007 2014" =
+    tabla_transicion_2007_2014,
+
+  "Permanencia general" =
+    tabla_permanencia_general,
+
+  "Permanencia origen" =
+    tabla_permanencia_origen,
+
+  "Dirección cambio" =
+    tabla_direccion_cambio,
+
+  "Trayectorias" =
+    tabla_trayectorias,
+
+  "Resultado según origen" =
+    tabla_riesgo_final,
+
+  "Comparación ponderación" =
+    tabla_comparacion_ponderacion,
+
+  "ID panel por año" =
+    tabla_id_panel,
+
+  "Unión persona referencia" =
+    tabla_union_persona_referencia,
+
+  "Género pareja 2014" =
+    tabla_direccion_genero_pareja,
+
+  "Duplicados" =
+    tabla_duplicados
+)
+```
+
+```{r}
+libro_salida <- openxlsx::createWorkbook()
+
+estilo_encabezado <- openxlsx::createStyle(
+  textDecoration = "bold",
+  halign = "center",
+  valign = "center",
+  wrapText = TRUE,
+  fgFill = "#EDE5F5"
+)
+
+for (
+  nombre_hoja in
+  names(
+    tablas_excel
+  )
+) {
+
+  nombre_hoja_seguro <- substr(
+    limpiar_vector_utf8(
+      nombre_hoja
+    ),
+    1,
+    31
+  )
+
+  nombre_hoja_seguro <- stringr::str_replace_all(
+    nombre_hoja_seguro,
+    "[:\\\\/?*\\[\\]]",
+    "_"
+  )
+
+  tabla_actual <- hacer_exportable(
+    tablas_excel[[
+      nombre_hoja
+    ]]
+  )
+
+  openxlsx::addWorksheet(
+    libro_salida,
+    nombre_hoja_seguro
+  )
+
+  if (
+    ncol(
+      tabla_actual
+    ) > 0 &&
+      nrow(
+        tabla_actual
+      ) > 0
+  ) {
+
+    openxlsx::writeDataTable(
+      libro_salida,
+      sheet =
+        nombre_hoja_seguro,
+      x =
+        tabla_actual,
+      tableStyle =
+        "TableStyleLight9"
+    )
+
+    openxlsx::freezePane(
+      libro_salida,
+      sheet =
+        nombre_hoja_seguro,
+      firstRow =
+        TRUE
+    )
+
+    openxlsx::addStyle(
+      libro_salida,
+      sheet =
+        nombre_hoja_seguro,
+      style =
+        estilo_encabezado,
+      rows =
+        1,
+      cols =
+        seq_len(
+          ncol(
+            tabla_actual
+          )
+        ),
+      gridExpand =
+        TRUE,
+      stack =
+        TRUE
+    )
+
+    openxlsx::setColWidths(
+      libro_salida,
+      sheet =
+        nombre_hoja_seguro,
+      cols =
+        seq_len(
+          ncol(
+            tabla_actual
+          )
+        ),
+      widths =
+        20
+    )
+
+  } else {
+
+    openxlsx::writeData(
+      libro_salida,
+      sheet =
+        nombre_hoja_seguro,
+      x =
+        "Sin registros"
+    )
+  }
+}
+
+openxlsx::saveWorkbook(
+  libro_salida,
+  archivo_excel,
+  overwrite = TRUE
+)
+```
+
+# Objetos reutilizables
+
+```{r}
+saveRDS(
+  base_analitica,
+  file.path(
+    ruta_objetos,
+    "07_base_analitica_deuda_ingreso.rds"
+  )
+)
+
+saveRDS(
+  base_wide,
+  file.path(
+    ruta_objetos,
+    "07_base_wide_deuda_ingreso.rds"
+  )
+)
+
+saveRDS(
+  tabla_trayectorias,
+  file.path(
+    ruta_objetos,
+    "07_trayectorias_deuda_ingreso.rds"
+  )
+)
+
+saveRDS(
+  figuras_exportar,
+  file.path(
+    ruta_objetos,
+    "07_figuras_deuda_ingreso.rds"
+  )
+)
+
+saveRDS(
+  base_persona_referencia_2014,
+  file.path(
+    ruta_objetos,
+    "07_persona_referencia_2014.rds"
+  )
+)
+
+saveRDS(
+  tabla_direccion_genero_pareja,
+  file.path(
+    ruta_objetos,
+    "07_direccion_genero_pareja_2014.rds"
+  )
+)
+```
+
+# Resumen automático
+
+```{r}
+cat(
+  "\n============================================\n",
+  "ANÁLISIS DE TRANSICIONES FINALIZADO\n",
+  "============================================\n\n",
+  "Archivo analizado:",
+  basename(
+    archivo_panel
+  ),
+  "\n",
+  "Hogares originales:",
+  dplyr::n_distinct(
+    base_panel$panel_id
+  ),
+  "\n",
+  "Hogares en panel analítico:",
+  dplyr::n_distinct(
+    base_analitica$panel_id
+  ),
+  "\n",
+  "Observaciones hogar-ola:",
+  nrow(
+    base_analitica
+  ),
+  "\n",
+  "Hogares con clasificación género-pareja:",
+  sum(
+    !is.na(
+      base_wide$grupo_genero_pareja
+    )
+  ),
+  "\n",
+  "Trayectorias distintas:",
+  nrow(
+    tabla_trayectorias
+  ),
+  "\n",
+  "Límite deuda baja:",
+  limite_deuda_baja,
+  "\n",
+  "Límite deuda intermedia:",
+  limite_deuda_intermedia,
+  "\n\n",
+  "Libro Excel:\n",
+  normalizePath(
+    archivo_excel,
+    winslash = "/",
+    mustWork = FALSE
+  ),
+  "\n\n",
+  "Carpeta de figuras:\n",
+  normalizePath(
+    ruta_figuras,
+    winslash = "/",
+    mustWork = FALSE
+  ),
+  "\n\n",
+  "Figura para la presentación:\n",
+  normalizePath(
+    file.path(
+      ruta_figuras,
+      "07_05_direccion_genero_pareja_2014.png"
+    ),
+    winslash = "/",
+    mustWork = FALSE
+  ),
+  "\n"
+)
+```
+
+# Información de la sesión
+
+```{r}
+sessionInfo()
+```

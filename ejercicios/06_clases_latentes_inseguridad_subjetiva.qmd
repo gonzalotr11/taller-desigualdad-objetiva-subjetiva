@@ -1,0 +1,3721 @@
+---
+title: "Clases latentes de inseguridad económica subjetiva"
+subtitle: "Configuraciones de vulnerabilidad y su distribución social"
+author: "Gonzalo Torres"
+date: today
+lang: es
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-fold: true
+    code-summary: "Mostrar código"
+    code-tools: true
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+  freeze: auto
+---
+
+# Propósito
+
+Este documento identifica configuraciones de inseguridad económica subjetiva mediante un análisis de clases latentes.
+
+Las clases se construyen exclusivamente con cuatro indicadores subjetivos:
+
+- dificultad para llegar a fin de mes;
+- fragilidad intensa ante una pérdida de ingresos;
+- desprotección financiera frente a problemas de salud;
+- falta de apoyo monetario ante una emergencia.
+
+Una vez identificadas las clases, se describe su distribución según:
+
+- género;
+- grupos combinados de género y edad;
+- posición de ingreso;
+- nivel educacional;
+- tenencia de vivienda;
+- condición de actividad;
+- género y estructura parental entre hogares con menores.
+
+La separación entre indicadores activos y variables externas permite distinguir dos preguntas:
+
+> ¿Qué configuraciones de inseguridad subjetiva existen?
+
+> ¿Cómo se distribuyen esas configuraciones entre distintas posiciones sociales?
+
+# Consideración sobre los ponderadores
+
+La estimación de las clases se realiza con `poLCA` sobre los casos observados. El paquete no incorpora directamente el diseño muestral complejo ni el ponderador en la estimación del modelo.
+
+Los ponderadores de la Encuesta de Bienestar Social se utilizan posteriormente para:
+
+- calcular la prevalencia poblacional descriptiva de las clases;
+- comparar su distribución entre mujeres y hombres;
+- describir diferencias por ingreso, educación, vivienda y actividad;
+- caracterizar las posiciones familiares.
+
+Por tanto, las clases representan patrones identificados en la muestra y sus prevalencias ponderadas se interpretan como una descripción poblacional posterior. Las pruebas de ajuste y los diagnósticos de clasificación pertenecen al modelo no ponderado.
+
+# Configuración del entorno
+
+## Paquetes
+
+```{r}
+paquetes_necesarios <- c(
+  "dplyr",
+  "tidyr",
+  "purrr",
+  "stringr",
+  "forcats",
+  "tibble",
+  "readr",
+  "openxlsx",
+  "here",
+  "knitr",
+  "ggplot2",
+  "scales",
+  "poLCA"
+)
+
+options(
+  repos = c(
+    CRAN = "https://cloud.r-project.org"
+  ),
+  dplyr.summarise.inform = FALSE,
+  scipen = 999
+)
+
+paquetes_faltantes <- paquetes_necesarios[
+  !paquetes_necesarios %in%
+    rownames(
+      installed.packages()
+    )
+]
+
+if (length(paquetes_faltantes) > 0) {
+
+  install.packages(
+    paquetes_faltantes,
+    repos = "https://cloud.r-project.org"
+  )
+}
+
+invisible(
+  lapply(
+    paquetes_necesarios,
+    library,
+    character.only = TRUE
+  )
+)
+```
+
+## Carpetas del proyecto
+
+```{r}
+ruta_datos_derivados <- here::here(
+  "Datos",
+  "EBS",
+  "derivados"
+)
+
+ruta_salidas <- here::here(
+  "outputs",
+  "06_clases_latentes_inseguridad_subjetiva"
+)
+
+ruta_tablas <- file.path(
+  ruta_salidas,
+  "tablas"
+)
+
+ruta_figuras <- file.path(
+  ruta_salidas,
+  "figuras"
+)
+
+ruta_objetos <- file.path(
+  ruta_salidas,
+  "objetos"
+)
+
+dir.create(
+  ruta_tablas,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+dir.create(
+  ruta_figuras,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+dir.create(
+  ruta_objetos,
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+cat(
+  "Directorio del proyecto:",
+  normalizePath(
+    here::here(),
+    winslash = "/",
+    mustWork = FALSE
+  ),
+  "\n"
+)
+```
+
+# Parámetros del análisis
+
+Este bloque concentra las decisiones que pueden modificarse después de revisar
+los primeros resultados. Con cuatro indicadores binarios, la enumeración se limita
+a tres clases para no estimar soluciones con más parámetros que patrones de
+respuesta identificables.
+
+```{r}
+numero_minimo_clases <- 1L
+
+numero_maximo_clases <- 3L
+
+numero_clases_elegido <- 3L
+
+numero_inicios_aleatorios <- 25L
+
+maximo_iteraciones <- 3000L
+
+semilla_general <- 20260723L
+
+reestimar_modelos <- FALSE
+
+archivo_cache_modelos <- file.path(
+  ruta_objetos,
+  "06_cache_modelos_enumeracion_lca.rds"
+)
+```
+
+```{r}
+if (
+  numero_clases_elegido <
+    numero_minimo_clases ||
+    numero_clases_elegido >
+      numero_maximo_clases
+) {
+
+  stop(
+    paste0(
+      "El número de clases elegido debe encontrarse entre ",
+      numero_minimo_clases,
+      " y ",
+      numero_maximo_clases,
+      "."
+    )
+  )
+}
+```
+
+# Paleta gráfica del taller
+
+La paleta mantiene la continuidad visual del taller mediante matices entre
+mostaza y morado. El mostaza representa las posiciones relativamente más
+protegidas y los morados representan grados crecientes de inseguridad.
+
+```{r}
+color_mostaza <- "#F2C94C"
+color_mostaza_oscuro <- "#C99A20"
+color_morado_claro <- "#A978B5"
+color_morado_medio <- "#7A3E8E"
+color_morado_oscuro <- "#4B1F63"
+color_gris_oscuro <- "#4D4D4D"
+color_gris_medio <- "#8A8A8A"
+color_gris_claro <- "#D9D9D9"
+
+paleta_criterios <- c(
+  "AIC" = color_mostaza,
+  "BIC" = color_mostaza_oscuro,
+  "BIC ajustado" = color_morado_claro,
+  "CAIC" = color_morado_oscuro
+)
+
+paleta_diagnostico <- c(
+  "Entropía normalizada" = color_mostaza,
+  "Probabilidad posterior máxima media" = color_mostaza_oscuro,
+  "Proporción con posterior ≥ 0,70" = color_morado_claro,
+  "Proporción con posterior ≥ 0,80" = color_morado_oscuro
+)
+```
+
+# Carga de la base analítica
+
+## Archivo requerido
+
+```{r}
+archivo_base <- file.path(
+  ruta_datos_derivados,
+  "01_ebs_vida_laboral_genero.rds"
+)
+
+if (!file.exists(archivo_base)) {
+
+  stop(
+    paste0(
+      "No se encontró la base derivada:\n",
+      archivo_base,
+      "\n\nRenderice primero analisis/01_preparacion_base.qmd."
+    )
+  )
+}
+```
+
+```{r}
+base_origen <- readRDS(
+  archivo_base
+)
+
+cat(
+  "Casos en la base de origen:",
+  nrow(
+    base_origen
+  ),
+  "\n"
+)
+
+cat(
+  "Variables en la base de origen:",
+  ncol(
+    base_origen
+  ),
+  "\n"
+)
+```
+
+# Verificación de variables
+
+## Indicadores activos
+
+```{r}
+variables_indicadores <- c(
+  "inseguridad_fin_mes",
+  "inseguridad_reservas",
+  "inseguridad_salud",
+  "inseguridad_apoyo"
+)
+```
+
+## Variables externas
+
+```{r}
+variables_externas <- c(
+  "genero",
+  "grupo_sexo_edad",
+  "posicion_ingreso_3",
+  "nivel_educacional_3",
+  "tenencia_vivienda_3",
+  "condicion_actividad",
+  "grupo_genero_estructura_menores",
+  "grupo_genero_tipo_hogar_menores",
+  "disminucion_ingreso",
+  "presencia_deuda"
+)
+```
+
+## Variables técnicas
+
+```{r}
+variables_tecnicas <- c(
+  "identificador_persona",
+  "ponderador",
+  "tramo_edad",
+  "presencia_menores_18",
+  "quintil_ingreso_etiqueta"
+)
+```
+
+```{r}
+variables_requeridas <- unique(
+  c(
+    variables_indicadores,
+    variables_externas,
+    variables_tecnicas
+  )
+)
+
+variables_faltantes <- setdiff(
+  variables_requeridas,
+  names(
+    base_origen
+  )
+)
+
+if (length(variables_faltantes) > 0) {
+
+  stop(
+    paste0(
+      "Faltan variables necesarias para el análisis:\n",
+      paste(
+        variables_faltantes,
+        collapse = ", "
+      )
+    )
+  )
+}
+```
+
+# Preparación de los indicadores
+
+`poLCA` requiere que las categorías observadas sean enteros consecutivos que comiencen en 1. Por eso los indicadores binarios originales, codificados como 0 y 1, se transforman en:
+
+- 1: condición relativamente protegida;
+- 2: condición de inseguridad.
+
+## Función de recodificación
+
+```{r}
+preparar_indicador_lca <- function(
+    x
+) {
+
+  dplyr::case_when(
+    x == 0L ~ 1L,
+    x == 1L ~ 2L,
+    TRUE ~ NA_integer_
+  )
+}
+
+normalizar_texto <- function(
+    x
+) {
+
+  x |>
+    as.character() |>
+    stringr::str_to_lower() |>
+    stringr::str_replace_all(
+      "[áàäâ]",
+      "a"
+    ) |>
+    stringr::str_replace_all(
+      "[éèëê]",
+      "e"
+    ) |>
+    stringr::str_replace_all(
+      "[íìïî]",
+      "i"
+    ) |>
+    stringr::str_replace_all(
+      "[óòöô]",
+      "o"
+    ) |>
+    stringr::str_replace_all(
+      "[úùüû]",
+      "u"
+    ) |>
+    stringr::str_replace_all(
+      "ñ",
+      "n"
+    ) |>
+    stringr::str_squish()
+}
+```
+
+## Base preparada
+
+```{r}
+base_preparada <- base_origen |>
+  dplyr::transmute(
+    identificador_persona = as.character(
+      identificador_persona
+    ),
+
+    ponderador = suppressWarnings(
+      as.numeric(
+        ponderador
+      )
+    ),
+
+    fin_mes_lca = preparar_indicador_lca(
+      inseguridad_fin_mes
+    ),
+
+    reservas_lca = preparar_indicador_lca(
+      inseguridad_reservas
+    ),
+
+    salud_lca = preparar_indicador_lca(
+      inseguridad_salud
+    ),
+
+    apoyo_lca = preparar_indicador_lca(
+      inseguridad_apoyo
+    ),
+
+    inseguridad_fin_mes,
+    inseguridad_reservas,
+    inseguridad_salud,
+    inseguridad_apoyo,
+
+    genero = factor(
+      as.character(
+        genero
+      ),
+      levels = c(
+        "Mujeres",
+        "Hombres"
+      )
+    ),
+
+    tramo_edad = factor(
+      as.character(
+        tramo_edad
+      ),
+      levels = c(
+        "18 a 29 años",
+        "30 a 44 años",
+        "45 a 59 años"
+      )
+    ),
+
+        grupo_sexo_edad = factor(
+      as.character(
+        grupo_sexo_edad
+      ),
+      levels = c(
+        "Mujeres · 18–29",
+        "Hombres · 18–29",
+        "Mujeres · 30–44",
+        "Hombres · 30–44",
+        "Mujeres · 45–59",
+        "Hombres · 45–59"
+      )
+    ),
+
+    posicion_ingreso_texto = normalizar_texto(
+      quintil_ingreso_etiqueta
+    ),
+
+    posicion_ingreso_3 = dplyr::case_when(
+      stringr::str_detect(
+        posicion_ingreso_texto,
+        "quintil\\s*(i|ii)\\b|primer quintil|segundo quintil|^1\\.?|^2\\.?"
+      ) ~
+        "Ingresos bajos",
+
+      stringr::str_detect(
+        posicion_ingreso_texto,
+        "quintil\\s*iii\\b|tercer quintil|^3\\.?"
+      ) ~
+        "Ingresos medios",
+
+      stringr::str_detect(
+        posicion_ingreso_texto,
+        "quintil\\s*(iv|v)\\b|cuarto quintil|quinto quintil|^4\\.?|^5\\.?"
+      ) ~
+        "Ingresos altos",
+
+      TRUE ~
+        NA_character_
+    ),
+
+    posicion_ingreso_3 = factor(
+      posicion_ingreso_3,
+      levels = c(
+        "Ingresos bajos",
+        "Ingresos medios",
+        "Ingresos altos"
+      )
+    ),
+
+    nivel_educacional_3 = forcats::fct_relevel(
+      factor(
+        as.character(
+          nivel_educacional_3
+        )
+      ),
+      "Educación básica",
+      "Educación media",
+      "Educación superior"
+    ),
+
+    tenencia_vivienda_3 = forcats::fct_relevel(
+      factor(
+        as.character(
+          tenencia_vivienda_3
+        )
+      ),
+      "Vivienda propia",
+      "Vivienda arrendada",
+      "Vivienda cedida u otra"
+    ),
+
+    condicion_actividad = factor(
+      as.character(
+        condicion_actividad
+      ),
+      levels = c(
+        "Ocupada/o",
+        "Desocupada/o",
+        "Fuera de la fuerza de trabajo"
+      )
+    ),
+
+    grupo_genero_estructura_menores = factor(
+      as.character(
+        grupo_genero_estructura_menores
+      ),
+      levels = c(
+        "Mujeres · hogar biparental",
+        "Mujeres · hogar monoparental",
+        "Hombres · hogar biparental",
+        "Hombres · hogar monoparental"
+      )
+    ),
+
+    grupo_genero_tipo_hogar_menores = factor(
+      as.character(
+        grupo_genero_tipo_hogar_menores
+      )
+    ),
+
+    cambio_ingreso = dplyr::case_when(
+      disminucion_ingreso == 0L ~
+        "Ingreso estable o aumentado",
+
+      disminucion_ingreso == 1L ~
+        "Ingreso disminuyó",
+
+      TRUE ~ NA_character_
+    ),
+
+    cambio_ingreso = factor(
+      cambio_ingreso,
+      levels = c(
+        "Ingreso estable o aumentado",
+        "Ingreso disminuyó"
+      )
+    ),
+
+    deuda = dplyr::case_when(
+      presencia_deuda == 0L ~
+        "Sin deuda",
+
+      presencia_deuda == 1L ~
+        "Con deuda",
+
+      TRUE ~ NA_character_
+    ),
+
+    deuda = factor(
+      deuda,
+      levels = c(
+        "Sin deuda",
+        "Con deuda"
+      )
+    ),
+
+    presencia_menores_18
+  )
+
+tabla_revision_ingreso <- base_preparada |>
+  dplyr::count(
+    posicion_ingreso_3,
+    name = "n",
+    .drop = FALSE
+  )
+
+knitr::kable(
+  tabla_revision_ingreso,
+  caption = "Distribución de la posición de ingreso reconstruida"
+)
+```
+
+```{r}
+variables_lca <- c(
+  "fin_mes_lca",
+  "reservas_lca",
+  "salud_lca",
+  "apoyo_lca"
+)
+```
+
+## Auditoría de variables externas
+
+```{r}
+variables_externas_revision <- c(
+  "genero",
+  "grupo_sexo_edad",
+  "posicion_ingreso_3",
+  "nivel_educacional_3",
+  "tenencia_vivienda_3",
+  "condicion_actividad",
+  "grupo_genero_estructura_menores",
+  "cambio_ingreso",
+  "deuda"
+)
+
+tabla_revision_variables_externas <- purrr::map_dfr(
+  variables_externas_revision,
+  function(variable) {
+    tibble::tibble(
+      variable = variable,
+      n_valido = sum(!is.na(base_preparada[[variable]])),
+      porcentaje_valido = 100 * mean(!is.na(base_preparada[[variable]])),
+      numero_categorias = dplyr::n_distinct(base_preparada[[variable]], na.rm = TRUE),
+      categorias = paste(unique(stats::na.omit(as.character(base_preparada[[variable]]))), collapse = " | ")
+    )
+  }
+)
+
+knitr::kable(
+  tabla_revision_variables_externas |>
+    dplyr::mutate(porcentaje_valido = round(porcentaje_valido, 1)),
+  caption = "Cobertura y categorías observadas en las variables externas"
+)
+```
+
+# Auditoría de cobertura
+
+## Cobertura de cada indicador
+
+```{r}
+tabla_cobertura_indicadores <- purrr::map_dfr(
+  variables_lca,
+  function(
+      variable
+  ) {
+
+    n_total <- nrow(
+      base_preparada
+    )
+
+    n_valido <- sum(
+      !is.na(
+        base_preparada[[variable]]
+      )
+    )
+
+    tibble::tibble(
+      variable = variable,
+      n_total = n_total,
+      n_valido = n_valido,
+      porcentaje_valido = 100 *
+        n_valido /
+        n_total,
+
+      numero_modalidades = dplyr::n_distinct(
+        base_preparada[[variable]],
+        na.rm = TRUE
+      ),
+
+      modalidades = paste(
+        sort(
+          unique(
+            stats::na.omit(
+              base_preparada[[variable]]
+            )
+          )
+        ),
+        collapse = " | "
+      )
+    )
+  }
+)
+```
+
+```{r}
+knitr::kable(
+  tabla_cobertura_indicadores |>
+    dplyr::mutate(
+      porcentaje_valido = round(
+        porcentaje_valido,
+        1
+      )
+    ),
+  caption = "Cobertura de los indicadores del análisis de clases latentes"
+)
+```
+
+## Verificación de las recodificaciones
+
+```{r}
+tabla_revision_indicadores <- dplyr::bind_rows(
+  base_preparada |>
+    dplyr::count(
+      valor_original =
+        inseguridad_fin_mes,
+
+      valor_lca =
+        fin_mes_lca,
+
+      name = "n",
+      .drop = FALSE
+    ) |>
+    dplyr::mutate(
+      indicador =
+        "Dificultad para llegar a fin de mes",
+      .before = 1
+    ),
+
+  base_preparada |>
+    dplyr::count(
+      valor_original =
+        inseguridad_reservas,
+
+      valor_lca =
+        reservas_lca,
+
+      name = "n",
+      .drop = FALSE
+    ) |>
+    dplyr::mutate(
+      indicador =
+        "Fragilidad ante pérdida de ingresos",
+      .before = 1
+    ),
+
+  base_preparada |>
+    dplyr::count(
+      valor_original =
+        inseguridad_salud,
+
+      valor_lca =
+        salud_lca,
+
+      name = "n",
+      .drop = FALSE
+    ) |>
+    dplyr::mutate(
+      indicador =
+        "Desprotección financiera en salud",
+      .before = 1
+    ),
+
+  base_preparada |>
+    dplyr::count(
+      valor_original =
+        inseguridad_apoyo,
+
+      valor_lca =
+        apoyo_lca,
+
+      name = "n",
+      .drop = FALSE
+    ) |>
+    dplyr::mutate(
+      indicador =
+        "Falta de apoyo monetario",
+      .before = 1
+    )
+)
+```
+
+```{r}
+knitr::kable(
+  tabla_revision_indicadores,
+  caption = "Correspondencia entre indicadores originales y categorías para la LCA"
+)
+```
+
+## Casos completos
+
+```{r}
+indicador_caso_completo <- stats::complete.cases(
+  base_preparada[
+    variables_lca
+  ]
+)
+
+tabla_muestra <- tibble::tibble(
+  indicador = c(
+    "Casos en la base de origen",
+    "Casos completos en los cuatro indicadores",
+    "Porcentaje retenido"
+  ),
+
+  valor = c(
+    nrow(
+      base_preparada
+    ),
+
+    sum(
+      indicador_caso_completo
+    ),
+
+    100 *
+      mean(
+        indicador_caso_completo
+      )
+  )
+)
+
+knitr::kable(
+  tabla_muestra |>
+    dplyr::mutate(
+      valor = round(
+        valor,
+        1
+      )
+    ),
+  caption = "Muestra disponible para el análisis de clases latentes"
+)
+```
+
+# Selección de la muestra analítica
+
+```{r}
+base_lca <- base_preparada |>
+  dplyr::filter(
+    stats::complete.cases(
+      dplyr::pick(
+        dplyr::all_of(
+          variables_lca
+        )
+      )
+    )
+  ) |>
+  dplyr::mutate(
+    fila_lca = dplyr::row_number()
+  ) |>
+  droplevels()
+```
+
+```{r}
+if (nrow(base_lca) == 0) {
+
+  stop(
+    "No quedaron casos completos para estimar las clases latentes."
+  )
+}
+```
+
+```{r}
+indicadores_sin_variacion <- tabla_cobertura_indicadores |>
+  dplyr::filter(
+    numero_modalidades < 2
+  ) |>
+  dplyr::pull(
+    variable
+  )
+
+if (length(indicadores_sin_variacion) > 0) {
+
+  stop(
+    paste0(
+      "Los siguientes indicadores no presentan dos modalidades válidas: ",
+      paste(
+        indicadores_sin_variacion,
+        collapse = ", "
+      ),
+      "."
+    )
+  )
+}
+```
+
+# Prevalencias de los indicadores
+
+## Diccionario de indicadores
+
+```{r}
+diccionario_indicadores <- tibble::tribble(
+  ~variable_lca, ~indicador,
+
+  "fin_mes_lca",
+  "Dificultad para llegar a fin de mes",
+
+  "reservas_lca",
+  "Fragilidad intensa ante pérdida de ingresos",
+
+  "salud_lca",
+  "Desprotección financiera en salud",
+
+  "apoyo_lca",
+  "Falta de apoyo monetario"
+)
+```
+
+## Función de media ponderada segura
+
+```{r}
+media_ponderada_segura <- function(
+    x,
+    w
+) {
+
+  casos_validos <-
+    !is.na(
+      x
+    ) &
+    !is.na(
+      w
+    ) &
+    w > 0
+
+  if (!any(casos_validos)) {
+
+    return(
+      NA_real_
+    )
+  }
+
+  stats::weighted.mean(
+    x[
+      casos_validos
+    ],
+    w[
+      casos_validos
+    ]
+  )
+}
+```
+
+## Prevalencias ponderadas y no ponderadas
+
+```{r}
+tabla_prevalencias_indicadores <- purrr::map_dfr(
+  variables_lca,
+  function(
+      variable
+  ) {
+
+    tibble::tibble(
+      variable_lca = variable,
+
+      prevalencia_no_ponderada = 100 *
+        mean(
+          base_lca[[variable]] == 2L,
+          na.rm = TRUE
+        ),
+
+      prevalencia_ponderada = 100 *
+        media_ponderada_segura(
+          base_lca[[variable]] == 2L,
+          base_lca$ponderador
+        )
+    )
+  }
+) |>
+  dplyr::left_join(
+    diccionario_indicadores,
+    by = "variable_lca"
+  ) |>
+  dplyr::select(
+    indicador,
+    variable_lca,
+    prevalencia_no_ponderada,
+    prevalencia_ponderada
+  )
+```
+
+```{r}
+knitr::kable(
+  tabla_prevalencias_indicadores |>
+    dplyr::mutate(
+      dplyr::across(
+        dplyr::starts_with(
+          "prevalencia"
+        ),
+        ~ round(
+          .x,
+          1
+        )
+      )
+    ),
+  caption = "Prevalencia de los indicadores de inseguridad económica"
+)
+```
+
+# Especificación del modelo
+
+```{r}
+formula_lca <- stats::as.formula(
+  paste0(
+    "cbind(",
+    paste(
+      variables_lca,
+      collapse = ", "
+    ),
+    ") ~ 1"
+  )
+)
+
+formula_lca
+```
+
+# Funciones de estimación y diagnóstico
+
+## Entropía normalizada
+
+```{r}
+calcular_entropia_normalizada <- function(
+    probabilidades_posteriores
+) {
+
+  numero_casos <- nrow(
+    probabilidades_posteriores
+  )
+
+  numero_clases <- ncol(
+    probabilidades_posteriores
+  )
+
+  if (
+    numero_casos == 0 ||
+      numero_clases <= 1
+  ) {
+
+    return(
+      NA_real_
+    )
+  }
+
+  probabilidades_seguras <- pmax(
+    probabilidades_posteriores,
+    .Machine$double.eps
+  )
+
+  entropia_observada <- -sum(
+    probabilidades_seguras *
+      log(
+        probabilidades_seguras
+      )
+  )
+
+  entropia_maxima <-
+    numero_casos *
+    log(
+      numero_clases
+    )
+
+  1 -
+    entropia_observada /
+      entropia_maxima
+}
+```
+
+## Número de parámetros
+
+Para cuatro indicadores binarios y un modelo sin covariables:
+
+- cada clase estima una probabilidad por indicador;
+- se estiman además las proporciones de pertenencia a las clases.
+
+```{r}
+calcular_numero_parametros <- function(
+    numero_clases,
+    numero_indicadores
+) {
+
+  numero_clases *
+    numero_indicadores +
+    numero_clases -
+    1
+}
+```
+
+## Estimación de una solución
+
+```{r}
+estimar_solucion_lca <- function(
+    numero_clases,
+    datos,
+    formula,
+    numero_inicios,
+    maximo_iteraciones,
+    semilla
+) {
+
+  set.seed(
+    semilla
+  )
+
+  numero_replicas <- ifelse(
+    numero_clases == 1L,
+    1L,
+    numero_inicios
+  )
+
+  resultado <- tryCatch(
+    poLCA::poLCA(
+      formula,
+      data = datos,
+      nclass = numero_clases,
+      nrep = numero_replicas,
+      maxiter = maximo_iteraciones,
+      tol = 1e-8,
+      na.rm = FALSE,
+      graphs = FALSE,
+      verbose = FALSE,
+      calc.se = FALSE
+    ),
+    error = function(
+        error
+    ) {
+
+      warning(
+        paste0(
+          "La solución de ",
+          numero_clases,
+          " clases produjo un error: ",
+          conditionMessage(
+            error
+          )
+        )
+      )
+
+      NULL
+    }
+  )
+
+  resultado
+}
+```
+
+# Enumeración de clases
+
+Se estiman soluciones de una a tres clases. Con cuatro indicadores binarios existen
+16 patrones de respuesta posibles. Una solución de tres clases utiliza 14 parámetros
+y conserva un grado de libertad residual; soluciones de cuatro o más clases excederían
+el número de parámetros identificables para esta especificación simple.
+
+Cada solución de dos o más clases se estima con múltiples inicios aleatorios para
+reducir la probabilidad de retener un máximo local. Los modelos se guardan
+inmediatamente en una caché reutilizable, de modo que un error posterior en el
+documento no obligue a repetir la estimación.
+
+```{r}
+secuencia_clases <- seq.int(
+  numero_minimo_clases,
+  numero_maximo_clases
+)
+```
+
+```{r}
+firma_modelos_actual <- list(
+  numero_casos = nrow(
+    base_lca
+  ),
+
+  variables_lca = variables_lca,
+
+  frecuencias_indicadores = vapply(
+    base_lca[
+      variables_lca
+    ],
+    function(
+        x
+    ) {
+      paste(
+        table(
+          x,
+          useNA = "ifany"
+        ),
+        collapse = "|"
+      )
+    },
+    character(
+      1
+    )
+  ),
+
+  secuencia_clases = secuencia_clases,
+
+  numero_inicios_aleatorios =
+    numero_inicios_aleatorios,
+
+  maximo_iteraciones =
+    maximo_iteraciones,
+
+  semilla_general =
+    semilla_general
+)
+```
+
+```{r}
+cache_modelos_valida <- FALSE
+
+if (
+  file.exists(
+    archivo_cache_modelos
+  ) &&
+    !reestimar_modelos
+) {
+
+  objeto_cache <- tryCatch(
+    readRDS(
+      archivo_cache_modelos
+    ),
+    error = function(
+        error
+    ) {
+      NULL
+    }
+  )
+
+  cache_modelos_valida <-
+    !is.null(
+      objeto_cache
+    ) &&
+    is.list(
+      objeto_cache
+    ) &&
+    all(
+      c(
+        "firma",
+        "modelos"
+      ) %in%
+        names(
+          objeto_cache
+        )
+    ) &&
+    identical(
+      objeto_cache$firma,
+      firma_modelos_actual
+    )
+}
+
+if (
+  cache_modelos_valida
+) {
+
+  modelos_lca <- objeto_cache$modelos
+
+  cat(
+    "Se reutilizaron los modelos almacenados en la caché.\n"
+  )
+
+} else {
+
+  modelos_lca <- vector(
+    mode = "list",
+    length = length(
+      secuencia_clases
+    )
+  )
+
+  names(
+    modelos_lca
+  ) <- paste0(
+    "clases_",
+    secuencia_clases
+  )
+
+  for (
+    indice_modelo in
+    seq_along(
+      secuencia_clases
+    )
+  ) {
+
+    numero_clases <-
+      secuencia_clases[[indice_modelo]]
+
+    nombre_modelo <- paste0(
+      "clases_",
+      numero_clases
+    )
+
+    cat(
+      "Estimando solución de",
+      numero_clases,
+      "clase(s)...\n"
+    )
+
+    modelos_lca[[nombre_modelo]] <-
+      estimar_solucion_lca(
+        numero_clases = numero_clases,
+        datos = base_lca,
+        formula = formula_lca,
+        numero_inicios =
+          numero_inicios_aleatorios,
+        maximo_iteraciones =
+          maximo_iteraciones,
+        semilla =
+          semilla_general +
+          numero_clases *
+            1000L
+      )
+
+    saveRDS(
+      list(
+        firma =
+          firma_modelos_actual,
+
+        modelos =
+          modelos_lca
+      ),
+      archivo_cache_modelos
+    )
+  }
+
+  cat(
+    "Los modelos estimados fueron guardados en la caché.\n"
+  )
+}
+```
+
+```{r}
+modelos_validos <- purrr::keep(
+  modelos_lca,
+  function(
+      modelo
+  ) {
+    !is.null(
+      modelo
+    ) &&
+      !is.null(
+        modelo$posterior
+      ) &&
+      nrow(
+        modelo$posterior
+      ) ==
+        nrow(
+          base_lca
+        )
+  }
+)
+
+if (length(modelos_validos) == 0) {
+
+  stop(
+    "No fue posible estimar ninguna solución de clases latentes."
+  )
+}
+```
+
+# Comparación del ajuste
+
+## Función para resumir una solución
+
+```{r}
+resumir_modelo_lca <- function(
+    modelo,
+    numero_clases,
+    numero_indicadores
+) {
+
+  if (is.null(modelo)) {
+
+    return(
+      tibble::tibble(
+        clases = numero_clases,
+        convergio = FALSE,
+        log_verosimilitud = NA_real_,
+        parametros = NA_integer_,
+        AIC = NA_real_,
+        BIC = NA_real_,
+        CAIC = NA_real_,
+        BIC_ajustado = NA_real_,
+        G_cuadrado = NA_real_,
+        chi_cuadrado = NA_real_,
+        grados_libertad_residuales = NA_real_,
+        entropia = NA_real_,
+        posterior_maxima_media = NA_real_,
+        proporcion_posterior_070 = NA_real_,
+        proporcion_posterior_080 = NA_real_,
+        clase_minima_n = NA_integer_,
+        clase_minima_porcentaje = NA_real_,
+        iteraciones = NA_integer_
+      )
+    )
+  }
+
+  if (
+    is.null(
+      modelo$posterior
+    ) ||
+      nrow(
+        modelo$posterior
+      ) == 0
+  ) {
+
+    return(
+      tibble::tibble(
+        clases = numero_clases,
+        convergio = FALSE,
+        log_verosimilitud = NA_real_,
+        parametros = NA_integer_,
+        AIC = NA_real_,
+        BIC = NA_real_,
+        CAIC = NA_real_,
+        BIC_ajustado = NA_real_,
+        G_cuadrado = NA_real_,
+        chi_cuadrado = NA_real_,
+        grados_libertad_residuales = NA_real_,
+        entropia = NA_real_,
+        posterior_maxima_media = NA_real_,
+        proporcion_posterior_070 = NA_real_,
+        proporcion_posterior_080 = NA_real_,
+        clase_minima_n = NA_integer_,
+        clase_minima_porcentaje = NA_real_,
+        iteraciones = NA_integer_
+      )
+    )
+  }
+
+  numero_casos <- nrow(
+    modelo$posterior
+  )
+
+  numero_parametros <- calcular_numero_parametros(
+    numero_clases = numero_clases,
+    numero_indicadores = numero_indicadores
+  )
+
+  posterior_maxima <- apply(
+    modelo$posterior,
+    1,
+    max
+  )
+
+  tamanos_clases <- table(
+    modelo$predclass
+  )
+
+  tibble::tibble(
+    clases = numero_clases,
+    convergio = TRUE,
+
+    log_verosimilitud =
+      modelo$ll,
+
+    parametros =
+      numero_parametros,
+
+    AIC =
+      modelo$aic,
+
+    BIC =
+      modelo$bic,
+
+    CAIC = -2 *
+      modelo$ll +
+      numero_parametros *
+        (
+          log(
+            numero_casos
+          ) +
+            1
+        ),
+
+    BIC_ajustado = -2 *
+      modelo$ll +
+      numero_parametros *
+        log(
+          (
+            numero_casos +
+              2
+          ) /
+            24
+        ),
+
+    G_cuadrado =
+      modelo$Gsq,
+
+    chi_cuadrado =
+      modelo$Chisq,
+
+    grados_libertad_residuales =
+      modelo$resid.df,
+
+    entropia =
+      calcular_entropia_normalizada(
+        modelo$posterior
+      ),
+
+    posterior_maxima_media =
+      mean(
+        posterior_maxima
+      ),
+
+    proporcion_posterior_070 =
+      mean(
+        posterior_maxima >= 0.70
+      ),
+
+    proporcion_posterior_080 =
+      mean(
+        posterior_maxima >= 0.80
+      ),
+
+    clase_minima_n =
+      min(
+        tamanos_clases
+      ),
+
+    clase_minima_porcentaje = 100 *
+      min(
+        tamanos_clases
+      ) /
+      sum(
+        tamanos_clases
+      ),
+
+    iteraciones =
+      modelo$numiter
+  )
+}
+```
+
+```{r}
+tabla_ajuste <- purrr::map2_dfr(
+  modelos_lca,
+  secuencia_clases,
+  function(
+      modelo,
+      numero_clases
+  ) {
+
+    resumir_modelo_lca(
+      modelo = modelo,
+      numero_clases = numero_clases,
+      numero_indicadores =
+        length(
+          variables_lca
+        )
+    )
+  }
+)
+```
+
+```{r}
+knitr::kable(
+  tabla_ajuste |>
+    dplyr::mutate(
+      dplyr::across(
+        c(
+          log_verosimilitud,
+          AIC,
+          BIC,
+          CAIC,
+          BIC_ajustado,
+          G_cuadrado,
+          chi_cuadrado
+        ),
+        ~ round(
+          .x,
+          1
+        )
+      ),
+
+      dplyr::across(
+        c(
+          entropia,
+          posterior_maxima_media,
+          proporcion_posterior_070,
+          proporcion_posterior_080,
+          clase_minima_porcentaje
+        ),
+        ~ round(
+          .x,
+          3
+        )
+      )
+    ),
+  caption = "Comparación de las soluciones de clases latentes"
+)
+```
+
+# Figura de criterios de información
+
+```{r}
+datos_figura_ajuste <- tabla_ajuste |>
+  dplyr::filter(
+    convergio
+  ) |>
+  dplyr::select(
+    clases,
+    AIC,
+    BIC,
+    CAIC,
+    BIC_ajustado
+  ) |>
+  tidyr::pivot_longer(
+    cols = -clases,
+    names_to = "criterio",
+    values_to = "valor"
+  ) |>
+  dplyr::mutate(
+    criterio = dplyr::recode(
+      criterio,
+      "AIC" = "AIC",
+      "BIC" = "BIC",
+      "CAIC" = "CAIC",
+      "BIC_ajustado" = "BIC ajustado"
+    )
+  )
+```
+
+```{r}
+figura_ajuste <- ggplot2::ggplot(
+  datos_figura_ajuste,
+  ggplot2::aes(
+    x = clases,
+    y = valor,
+    group = criterio,
+    color = criterio,
+    linetype = criterio,
+    shape = criterio
+  )
+) +
+  ggplot2::geom_line(
+    linewidth = 0.9
+  ) +
+  ggplot2::geom_point(
+    size = 3
+  ) +
+  ggplot2::scale_color_manual(
+    values = paleta_criterios,
+    breaks = names(paleta_criterios),
+    limits = names(paleta_criterios),
+    drop = FALSE
+  ) +
+  ggplot2::scale_x_continuous(
+    breaks = secuencia_clases
+  ) +
+  ggplot2::labs(
+    title = "Comparación del ajuste de las soluciones",
+    subtitle = "Valores más bajos indican mejor ajuste relativo, con distinta penalización por complejidad",
+    x = "Número de clases",
+    y = "Criterio de información",
+    color = "Criterio",
+    linetype = "Criterio",
+    shape = "Criterio",
+    caption = "La selección final también debe considerar parsimonia, tamaños de clase y claridad sustantiva."
+  ) +
+  ggplot2::theme_minimal(
+    base_size = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.minor =
+      ggplot2::element_blank(),
+
+    plot.title =
+      ggplot2::element_text(
+        face = "bold"
+      ),
+
+    legend.position =
+      "bottom"
+  )
+
+figura_ajuste
+```
+
+# Diagnóstico de clasificación
+
+```{r}
+datos_figura_clasificacion <- tabla_ajuste |>
+  dplyr::filter(
+    convergio,
+    clases > 1
+  ) |>
+  dplyr::select(
+    clases,
+    entropia,
+    posterior_maxima_media,
+    proporcion_posterior_070,
+    proporcion_posterior_080
+  ) |>
+  tidyr::pivot_longer(
+    cols = -clases,
+    names_to = "indicador",
+    values_to = "valor"
+  ) |>
+  dplyr::mutate(
+    indicador = dplyr::recode(
+      indicador,
+      "entropia" =
+        "Entropía normalizada",
+
+      "posterior_maxima_media" =
+        "Probabilidad posterior máxima media",
+
+      "proporcion_posterior_070" =
+        "Proporción con posterior ≥ 0,70",
+
+      "proporcion_posterior_080" =
+        "Proporción con posterior ≥ 0,80"
+    )
+  )
+```
+
+```{r}
+figura_clasificacion <- ggplot2::ggplot(
+  datos_figura_clasificacion,
+  ggplot2::aes(
+    x = clases,
+    y = valor,
+    group = indicador,
+    color = indicador,
+    linetype = indicador,
+    shape = indicador
+  )
+) +
+  ggplot2::geom_line(
+    linewidth = 0.9
+  ) +
+  ggplot2::geom_point(
+    size = 3
+  ) +
+  ggplot2::scale_color_manual(
+    values = paleta_diagnostico,
+    breaks = names(paleta_diagnostico),
+    limits = names(paleta_diagnostico),
+    drop = FALSE
+  ) +
+  ggplot2::scale_x_continuous(
+    breaks = secuencia_clases
+  ) +
+  ggplot2::scale_y_continuous(
+    limits = c(
+      0,
+      1
+    ),
+    labels = scales::label_percent(
+      accuracy = 1
+    )
+  ) +
+  ggplot2::labs(
+    title = "Calidad de clasificación según número de clases",
+    x = "Número de clases",
+    y = NULL,
+    color = NULL,
+    linetype = NULL,
+    shape = NULL,
+    caption = "Valores más altos expresan mayor separación entre las clases."
+  ) +
+  ggplot2::theme_minimal(
+    base_size = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.minor =
+      ggplot2::element_blank(),
+
+    plot.title =
+      ggplot2::element_text(
+        face = "bold"
+      ),
+
+    legend.position =
+      "bottom"
+  )
+
+figura_clasificacion
+```
+
+# Selección de la solución principal
+
+El número de clases se fija al comienzo del documento mediante `numero_clases_elegido`. La especificación inicial utiliza tres clases para facilitar el ejercicio pedagógico, pero la decisión debe revisarse a partir de:
+
+- criterios de información;
+- entropía;
+- tamaño de la clase más pequeña;
+- probabilidades posteriores;
+- claridad de los perfiles.
+
+```{r}
+nombre_modelo_elegido <- paste0(
+  "clases_",
+  numero_clases_elegido
+)
+
+modelo_elegido <- modelos_lca[[
+  nombre_modelo_elegido
+]]
+
+if (
+  is.null(
+    modelo_elegido
+  ) ||
+    is.null(
+      modelo_elegido$posterior
+    ) ||
+    nrow(
+      modelo_elegido$posterior
+    ) !=
+      nrow(
+        base_lca
+      )
+) {
+
+  stop(
+    paste0(
+      "La solución elegida de ",
+      numero_clases_elegido,
+      " clases no fue estimada correctamente o no coincide con la muestra analítica."
+    )
+  )
+}
+```
+
+# Extracción de los perfiles de clase
+
+## Función para recuperar la probabilidad de inseguridad
+
+La categoría 2 corresponde a la modalidad de inseguridad en cada indicador.
+
+```{r}
+extraer_probabilidades_inseguridad <- function(
+    modelo,
+    diccionario
+) {
+
+  if (
+    is.null(
+      modelo$probs
+    ) ||
+      length(
+        modelo$probs
+      ) == 0
+  ) {
+
+    stop(
+      "El modelo elegido no contiene probabilidades condicionales."
+    )
+  }
+
+  variables_probabilidades <- intersect(
+    names(
+      modelo$probs
+    ),
+    diccionario$variable_lca
+  )
+
+  if (
+    length(
+      variables_probabilidades
+    ) !=
+      nrow(
+        diccionario
+      )
+  ) {
+
+    stop(
+      paste0(
+        "No fue posible reconocer todas las variables en modelo$probs. Variables encontradas: ",
+        paste(
+          names(
+            modelo$probs
+          ),
+          collapse = ", "
+        )
+      )
+    )
+  }
+
+  purrr::map_dfr(
+    variables_probabilidades,
+    function(
+        variable
+    ) {
+
+      matriz_probabilidades <-
+        modelo$probs[[variable]]
+
+      if (ncol(matriz_probabilidades) < 2) {
+
+        stop(
+          paste0(
+            "El indicador ",
+            variable,
+            " no presenta dos categorías en el modelo."
+          )
+        )
+      }
+
+      tibble::tibble(
+        variable_lca = variable,
+        clase_original =
+          seq_len(
+            nrow(
+              matriz_probabilidades
+            )
+          ),
+
+        probabilidad_inseguridad =
+          matriz_probabilidades[
+            ,
+            2
+          ]
+      )
+    }
+  ) |>
+    dplyr::left_join(
+      diccionario,
+      by = "variable_lca"
+    )
+}
+```
+
+```{r}
+perfiles_originales <- extraer_probabilidades_inseguridad(
+  modelo = modelo_elegido,
+  diccionario = diccionario_indicadores
+)
+```
+
+# Ordenamiento sustantivo de las clases
+
+Las etiquetas numéricas producidas por el modelo son arbitrarias. Para hacer comparables las figuras, las clases se ordenan según la probabilidad media de inseguridad en los cuatro indicadores.
+
+```{r}
+orden_clases <- perfiles_originales |>
+  dplyr::group_by(
+    clase_original
+  ) |>
+  dplyr::summarise(
+    promedio_inseguridad = mean(
+      probabilidad_inseguridad
+    ),
+    .groups = "drop"
+  ) |>
+  dplyr::arrange(
+    promedio_inseguridad
+  ) |>
+  dplyr::mutate(
+    clase_ordenada = dplyr::row_number()
+  )
+```
+
+## Etiquetas de la solución
+
+Para la solución inicial de tres clases se utilizan nombres provisionales. Los nombres deben revisarse después de observar los perfiles.
+
+```{r}
+crear_etiquetas_clase <- function(
+    numero_clases
+) {
+
+  if (numero_clases == 2L) {
+
+    return(
+      c(
+        "Relativamente protegida",
+        "Inseguridad acumulada"
+      )
+    )
+  }
+
+  if (numero_clases == 3L) {
+
+    return(
+      c(
+        "Relativamente protegida",
+        "Vulnerabilidad parcial",
+        "Inseguridad acumulada"
+      )
+    )
+  }
+
+  paste0(
+    "Clase ",
+    seq_len(
+      numero_clases
+    )
+  )
+}
+```
+
+```{r}
+etiquetas_clases <- crear_etiquetas_clase(
+  numero_clases_elegido
+)
+
+paleta_clases <- if (numero_clases_elegido == 2L) {
+  c(
+    "Relativamente protegida" = color_mostaza,
+    "Inseguridad acumulada" = color_morado_oscuro
+  )
+} else if (numero_clases_elegido == 3L) {
+  c(
+    "Relativamente protegida" = color_mostaza,
+    "Vulnerabilidad parcial" = color_morado_claro,
+    "Inseguridad acumulada" = color_morado_oscuro
+  )
+} else {
+  stats::setNames(
+    grDevices::colorRampPalette(c(color_mostaza, color_morado_oscuro))(numero_clases_elegido),
+    etiquetas_clases
+  )
+}
+
+escala_color_clases <- function() {
+  ggplot2::scale_color_manual(
+    values = paleta_clases,
+    breaks = names(paleta_clases),
+    limits = names(paleta_clases),
+    drop = FALSE
+  )
+}
+
+escala_relleno_clases <- function() {
+  ggplot2::scale_fill_manual(
+    values = paleta_clases,
+    breaks = names(paleta_clases),
+    limits = names(paleta_clases),
+    drop = FALSE
+  )
+}
+
+diccionario_clases <- orden_clases |>
+  dplyr::mutate(
+    clase_etiqueta =
+      etiquetas_clases[
+        clase_ordenada
+      ],
+
+    clase_etiqueta = factor(
+      clase_etiqueta,
+      levels =
+        etiquetas_clases
+    )
+  )
+```
+
+```{r}
+knitr::kable(
+  diccionario_clases |>
+    dplyr::mutate(
+      promedio_inseguridad = round(
+        promedio_inseguridad,
+        3
+      )
+    ),
+  caption = "Ordenamiento y etiquetado provisional de las clases"
+)
+```
+
+# Perfiles ordenados
+
+```{r}
+tabla_perfiles_clases <- perfiles_originales |>
+  dplyr::left_join(
+    diccionario_clases,
+    by = "clase_original"
+  ) |>
+  dplyr::mutate(
+    indicador = factor(
+      indicador,
+      levels = c(
+        "Dificultad para llegar a fin de mes",
+        "Fragilidad intensa ante pérdida de ingresos",
+        "Desprotección financiera en salud",
+        "Falta de apoyo monetario"
+      )
+    )
+  ) |>
+  dplyr::select(
+    clase_original,
+    clase_ordenada,
+    clase_etiqueta,
+    variable_lca,
+    indicador,
+    probabilidad_inseguridad,
+    promedio_inseguridad
+  ) |>
+  dplyr::arrange(
+    clase_ordenada,
+    indicador
+  )
+```
+
+```{r}
+knitr::kable(
+  tabla_perfiles_clases |>
+    dplyr::mutate(
+      probabilidad_inseguridad = round(
+        probabilidad_inseguridad,
+        3
+      ),
+
+      promedio_inseguridad = round(
+        promedio_inseguridad,
+        3
+      )
+    ),
+  caption = "Probabilidades condicionales de inseguridad según clase"
+)
+```
+
+# Figura de perfiles
+
+```{r}
+figura_perfiles <- ggplot2::ggplot(
+  tabla_perfiles_clases,
+  ggplot2::aes(
+    x = indicador,
+    y = probabilidad_inseguridad,
+    group = clase_etiqueta,
+    color = clase_etiqueta,
+    linetype = clase_etiqueta,
+    shape = clase_etiqueta
+  )
+) +
+  ggplot2::geom_line(
+    linewidth = 1
+  ) +
+  ggplot2::geom_point(
+    size = 3.6,
+    stroke = 1
+  ) +
+  escala_color_clases() +
+  ggplot2::scale_y_continuous(
+    limits = c(
+      0,
+      1
+    ),
+    breaks = seq(
+      0,
+      1,
+      by = 0.2
+    ),
+    labels = scales::label_percent(
+      accuracy = 1
+    )
+  ) +
+  ggplot2::labs(
+    title = "Perfiles de inseguridad económica subjetiva",
+    subtitle = paste0(
+      "Solución de ",
+      numero_clases_elegido,
+      " clases"
+    ),
+    x = NULL,
+    y = "Probabilidad condicional de inseguridad",
+    color = "Clase",
+    linetype = "Clase",
+    shape = "Clase",
+    caption = "Las clases se ordenan desde la menor hacia la mayor probabilidad media de inseguridad."
+  ) +
+  ggplot2::theme_minimal(
+    base_size = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.minor =
+      ggplot2::element_blank(),
+
+    axis.text.x =
+      ggplot2::element_text(
+        angle = 20,
+        hjust = 1
+      ),
+
+    plot.title =
+      ggplot2::element_text(
+        face = "bold"
+      ),
+
+    legend.position =
+      "bottom"
+  )
+
+figura_perfiles
+```
+
+# Incorporación de probabilidades posteriores
+
+## Asignación modal y probabilidades individuales
+
+```{r}
+posteriores <- as.data.frame(
+  modelo_elegido$posterior
+) |>
+  tibble::as_tibble()
+
+names(
+  posteriores
+) <- paste0(
+  "posterior_clase_original_",
+  seq_len(
+    ncol(
+      posteriores
+    )
+  )
+)
+```
+
+```{r}
+base_clasificada <- base_lca |>
+  dplyr::mutate(
+    clase_original =
+      modelo_elegido$predclass,
+
+    posterior_maxima = apply(
+      modelo_elegido$posterior,
+      1,
+      max
+    )
+  ) |>
+  dplyr::left_join(
+    diccionario_clases |>
+      dplyr::select(
+        clase_original,
+        clase_ordenada,
+        clase_etiqueta
+      ),
+    by = "clase_original"
+  ) |>
+  dplyr::bind_cols(
+    posteriores
+  ) |>
+  dplyr::mutate(
+    clase_etiqueta = factor(
+      as.character(
+        clase_etiqueta
+      ),
+      levels = etiquetas_clases
+    )
+  )
+```
+
+```{r}
+if (
+  nrow(
+    base_clasificada
+  ) !=
+    nrow(
+      base_lca
+    )
+) {
+
+  stop(
+    "El número de casos clasificados no coincide con la muestra del modelo."
+  )
+}
+```
+
+# Diagnóstico de la solución elegida
+
+## Tamaños de clase
+
+```{r}
+tabla_tamanos_clase <- base_clasificada |>
+  dplyr::group_by(
+    clase_ordenada,
+    clase_etiqueta
+  ) |>
+  dplyr::summarise(
+    n = dplyr::n(),
+
+    suma_ponderadores = sum(
+      ponderador,
+      na.rm = TRUE
+    ),
+
+    posterior_maxima_media = mean(
+      posterior_maxima
+    ),
+
+    proporcion_posterior_070 = mean(
+      posterior_maxima >= 0.70
+    ),
+
+    proporcion_posterior_080 = mean(
+      posterior_maxima >= 0.80
+    ),
+
+    .groups = "drop"
+  ) |>
+  dplyr::mutate(
+    porcentaje_no_ponderado = 100 *
+      n /
+      sum(
+        n
+      ),
+
+    porcentaje_ponderado = 100 *
+      suma_ponderadores /
+      sum(
+        suma_ponderadores
+      )
+  ) |>
+  dplyr::arrange(
+    clase_ordenada
+  )
+```
+
+```{r}
+knitr::kable(
+  tabla_tamanos_clase |>
+    dplyr::mutate(
+      suma_ponderadores = round(
+        suma_ponderadores
+      ),
+
+      dplyr::across(
+        c(
+          posterior_maxima_media,
+          proporcion_posterior_070,
+          proporcion_posterior_080
+        ),
+        ~ round(
+          .x,
+          3
+        )
+      ),
+
+      dplyr::across(
+        c(
+          porcentaje_no_ponderado,
+          porcentaje_ponderado
+        ),
+        ~ round(
+          .x,
+          1
+        )
+      )
+    ),
+  caption = "Tamaño y calidad de clasificación de las clases elegidas"
+)
+```
+
+## Figura de prevalencia de las clases
+
+```{r}
+figura_prevalencia_clases <- tabla_tamanos_clase |>
+  ggplot2::ggplot(
+    ggplot2::aes(
+      x = clase_etiqueta,
+      y = porcentaje_ponderado,
+      fill = clase_etiqueta
+    )
+  ) +
+  ggplot2::geom_col(
+    width = 0.68
+  ) +
+  escala_relleno_clases() +
+  ggplot2::geom_text(
+    ggplot2::aes(
+      label = paste0(
+        round(
+          porcentaje_ponderado,
+          1
+        ),
+        "%"
+      )
+    ),
+    vjust = -0.4,
+    size = 3.8
+  ) +
+  ggplot2::scale_y_continuous(
+    labels = scales::label_percent(
+      scale = 1
+    ),
+    expand = ggplot2::expansion(
+      mult = c(
+        0,
+        0.12
+      )
+    )
+  ) +
+  ggplot2::labs(
+    title = "Prevalencia ponderada de las clases",
+    subtitle = "Asignación de cada persona a su clase de mayor probabilidad posterior",
+    x = NULL,
+    y = "Porcentaje de la población",
+    fill = "Clase",
+    caption = "La clasificación modal resume una pertenencia originalmente probabilística."
+  ) +
+  ggplot2::theme_minimal(
+    base_size = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.minor =
+      ggplot2::element_blank(),
+
+    panel.grid.major.x =
+      ggplot2::element_blank(),
+
+    axis.text.x =
+      ggplot2::element_text(
+        angle = 15,
+        hjust = 1
+      ),
+
+    plot.title =
+      ggplot2::element_text(
+        face = "bold"
+      ),
+
+    legend.position =
+      "bottom"
+  )
+
+figura_prevalencia_clases
+```
+
+# Funciones para distribuciones externas
+
+## Distribución ponderada de clases dentro de cada grupo
+
+```{r}
+calcular_distribucion_clases <- function(
+    datos,
+    variable_grupo,
+    etiqueta_variable
+) {
+
+  datos |>
+    dplyr::filter(
+      !is.na(
+        .data[[variable_grupo]]
+      ),
+      !is.na(
+        clase_etiqueta
+      ),
+      !is.na(
+        ponderador
+      ),
+      ponderador > 0
+    ) |>
+    dplyr::group_by(
+      grupo = .data[[variable_grupo]],
+      clase_etiqueta
+    ) |>
+    dplyr::summarise(
+      n = dplyr::n(),
+
+      frecuencia_ponderada = sum(
+        ponderador
+      ),
+
+      .groups = "drop"
+    ) |>
+    dplyr::group_by(
+      grupo
+    ) |>
+    dplyr::mutate(
+      porcentaje_clase_dentro_grupo = 100 *
+        frecuencia_ponderada /
+        sum(
+          frecuencia_ponderada
+        )
+    ) |>
+    dplyr::ungroup() |>
+    dplyr::mutate(
+      color_texto = dplyr::case_when(
+        as.character(clase_etiqueta) == "Inseguridad acumulada" ~ "white",
+        TRUE ~ color_gris_oscuro
+      ),
+      variable_grupo = variable_grupo,
+      dimension = etiqueta_variable,
+      .before = 1
+    )
+}
+```
+
+## Distribución de características dentro de cada clase
+
+```{r}
+calcular_composicion_clases <- function(
+    datos,
+    variable_grupo,
+    etiqueta_variable
+) {
+
+  datos |>
+    dplyr::filter(
+      !is.na(
+        .data[[variable_grupo]]
+      ),
+      !is.na(
+        clase_etiqueta
+      ),
+      !is.na(
+        ponderador
+      ),
+      ponderador > 0
+    ) |>
+    dplyr::group_by(
+      clase_etiqueta,
+      grupo = .data[[variable_grupo]]
+    ) |>
+    dplyr::summarise(
+      n = dplyr::n(),
+
+      frecuencia_ponderada = sum(
+        ponderador
+      ),
+
+      .groups = "drop"
+    ) |>
+    dplyr::group_by(
+      clase_etiqueta
+    ) |>
+    dplyr::mutate(
+      porcentaje_grupo_dentro_clase = 100 *
+        frecuencia_ponderada /
+        sum(
+          frecuencia_ponderada
+        )
+    ) |>
+    dplyr::ungroup() |>
+    dplyr::mutate(
+      variable_grupo = variable_grupo,
+      dimension = etiqueta_variable,
+      .before = 1
+    )
+}
+```
+
+# Distribución por género
+
+```{r}
+tabla_clases_genero <- calcular_distribucion_clases(
+  datos = base_clasificada,
+  variable_grupo = "genero",
+  etiqueta_variable = "Género"
+)
+```
+
+```{r}
+knitr::kable(
+  tabla_clases_genero |>
+    dplyr::mutate(
+      frecuencia_ponderada = round(
+        frecuencia_ponderada
+      ),
+
+      porcentaje_clase_dentro_grupo = round(
+        porcentaje_clase_dentro_grupo,
+        1
+      )
+    ),
+  caption = "Distribución ponderada de clases dentro de cada género"
+)
+```
+
+```{r}
+figura_genero <- ggplot2::ggplot(
+  tabla_clases_genero,
+  ggplot2::aes(
+    x = grupo,
+    y = porcentaje_clase_dentro_grupo,
+    fill = clase_etiqueta
+  )
+) +
+  ggplot2::geom_col(
+    position = "stack",
+    width = 0.68
+  ) +
+  ggplot2::geom_text(
+    ggplot2::aes(
+      label = dplyr::if_else(
+        porcentaje_clase_dentro_grupo >= 7,
+        paste0(
+          round(
+            porcentaje_clase_dentro_grupo,
+            1
+          ),
+          "%"
+        ),
+        ""
+      ),
+      color = color_texto
+    ),
+    position = ggplot2::position_stack(
+      vjust = 0.5
+    ),
+    size = 3.5,
+    show.legend = FALSE
+  ) +
+  ggplot2::scale_color_identity() +
+  escala_relleno_clases() +
+  ggplot2::scale_y_continuous(
+    labels = scales::label_percent(
+      scale = 1
+    )
+  ) +
+  ggplot2::labs(
+    title = "Clases de inseguridad económica según género",
+    subtitle = "Distribución ponderada de las clases dentro de mujeres y hombres",
+    x = NULL,
+    y = "Porcentaje dentro del género",
+    fill = "Clase",
+    caption = "Cada barra suma 100% dentro del grupo."
+  ) +
+  ggplot2::theme_minimal(
+    base_size = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.minor =
+      ggplot2::element_blank(),
+
+    panel.grid.major.x =
+      ggplot2::element_blank(),
+
+    plot.title =
+      ggplot2::element_text(
+        face = "bold"
+      ),
+
+    legend.position =
+      "bottom"
+  )
+
+figura_genero
+```
+
+# Distribución por grupos sexo-etarios
+
+```{r}
+tabla_clases_sexo_edad <- calcular_distribucion_clases(
+  datos = base_clasificada,
+  variable_grupo = "grupo_sexo_edad",
+  etiqueta_variable = "Grupo sexo-etario"
+)
+```
+
+```{r}
+figura_sexo_edad <- ggplot2::ggplot(
+  tabla_clases_sexo_edad,
+  ggplot2::aes(
+    x = grupo,
+    y = porcentaje_clase_dentro_grupo,
+    fill = clase_etiqueta
+  )
+) +
+  ggplot2::geom_col(
+    width = 0.72
+  ) +
+  ggplot2::geom_text(
+    ggplot2::aes(
+      label = dplyr::if_else(
+        porcentaje_clase_dentro_grupo >= 8,
+        paste0(
+          round(
+            porcentaje_clase_dentro_grupo,
+            1
+          ),
+          "%"
+        ),
+        ""
+      ),
+      color = color_texto
+    ),
+    position = ggplot2::position_stack(
+      vjust = 0.5
+    ),
+    size = 3.1,
+    show.legend = FALSE
+  ) +
+  ggplot2::scale_color_identity() +
+  escala_relleno_clases() +
+  ggplot2::scale_y_continuous(
+    labels = scales::label_percent(
+      scale = 1
+    )
+  ) +
+  ggplot2::labs(
+    title = "Clases de inseguridad según género y edad",
+    x = NULL,
+    y = "Porcentaje dentro del grupo",
+    fill = "Clase",
+    caption = "Comparación transversal de los grupos sexo-etarios."
+  ) +
+  ggplot2::theme_minimal(
+    base_size = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.minor =
+      ggplot2::element_blank(),
+
+    panel.grid.major.x =
+      ggplot2::element_blank(),
+
+    axis.text.x =
+      ggplot2::element_text(
+        angle = 25,
+        hjust = 1
+      ),
+
+    plot.title =
+      ggplot2::element_text(
+        face = "bold"
+      ),
+
+    legend.position =
+      "bottom"
+  )
+
+figura_sexo_edad
+```
+
+# Distribución por posición de ingreso
+
+```{r}
+tabla_clases_ingreso <- calcular_distribucion_clases(
+  datos = base_clasificada,
+  variable_grupo = "posicion_ingreso_3",
+  etiqueta_variable = "Posición de ingreso"
+)
+```
+
+```{r}
+figura_ingreso <- ggplot2::ggplot(
+  tabla_clases_ingreso,
+  ggplot2::aes(
+    x = grupo,
+    y = porcentaje_clase_dentro_grupo,
+    fill = clase_etiqueta
+  )
+) +
+  ggplot2::geom_col(
+    width = 0.72
+  ) +
+  ggplot2::geom_text(
+    ggplot2::aes(
+      label = dplyr::if_else(
+        porcentaje_clase_dentro_grupo >= 7,
+        paste0(
+          round(
+            porcentaje_clase_dentro_grupo,
+            1
+          ),
+          "%"
+        ),
+        ""
+      ),
+      color = color_texto
+    ),
+    position = ggplot2::position_stack(
+      vjust = 0.5
+    ),
+    size = 3.4,
+    show.legend = FALSE
+  ) +
+  ggplot2::scale_color_identity() +
+  escala_relleno_clases() +
+  ggplot2::scale_y_continuous(
+    labels = scales::label_percent(
+      scale = 1
+    )
+  ) +
+  ggplot2::labs(
+    title = "Clases de inseguridad según posición de ingreso",
+    subtitle = "Distribución ponderada de las clases dentro de cada posición",
+    x = NULL,
+    y = "Porcentaje dentro del grupo de ingresos",
+    fill = "Clase",
+    caption = "El ingreso describe externamente las clases y no participa en su formación."
+  ) +
+  ggplot2::theme_minimal(
+    base_size = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.minor =
+      ggplot2::element_blank(),
+
+    panel.grid.major.x =
+      ggplot2::element_blank(),
+
+    plot.title =
+      ggplot2::element_text(
+        face = "bold"
+      ),
+
+    legend.position =
+      "bottom"
+  )
+
+figura_ingreso
+```
+
+# Distribución por nivel educacional
+
+```{r}
+tabla_clases_educacion <- calcular_distribucion_clases(
+  datos = base_clasificada,
+  variable_grupo = "nivel_educacional_3",
+  etiqueta_variable = "Nivel educacional"
+)
+```
+
+```{r}
+figura_educacion <- ggplot2::ggplot(
+  tabla_clases_educacion,
+  ggplot2::aes(
+    x = grupo,
+    y = porcentaje_clase_dentro_grupo,
+    fill = clase_etiqueta
+  )
+) +
+  ggplot2::geom_col(
+    width = 0.72
+  ) +
+  escala_relleno_clases() +
+  ggplot2::scale_y_continuous(
+    labels = scales::label_percent(
+      scale = 1
+    )
+  ) +
+  ggplot2::labs(
+    title = "Clases de inseguridad según nivel educacional",
+    x = NULL,
+    y = "Porcentaje dentro del nivel educacional",
+    fill = "Clase",
+    caption = "Distribución ponderada."
+  ) +
+  ggplot2::theme_minimal(
+    base_size = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.minor =
+      ggplot2::element_blank(),
+
+    panel.grid.major.x =
+      ggplot2::element_blank(),
+
+    plot.title =
+      ggplot2::element_text(
+        face = "bold"
+      ),
+
+    legend.position =
+      "bottom"
+  )
+
+figura_educacion
+```
+
+# Distribución por tenencia de vivienda
+
+```{r}
+tabla_clases_tenencia <- calcular_distribucion_clases(
+  datos = base_clasificada,
+  variable_grupo = "tenencia_vivienda_3",
+  etiqueta_variable = "Tenencia de vivienda"
+)
+```
+
+```{r}
+figura_tenencia <- ggplot2::ggplot(
+  tabla_clases_tenencia,
+  ggplot2::aes(
+    x = grupo,
+    y = porcentaje_clase_dentro_grupo,
+    fill = clase_etiqueta
+  )
+) +
+  ggplot2::geom_col(
+    width = 0.72
+  ) +
+  escala_relleno_clases() +
+  ggplot2::scale_y_continuous(
+    labels = scales::label_percent(
+      scale = 1
+    )
+  ) +
+  ggplot2::labs(
+    title = "Clases de inseguridad según tenencia de vivienda",
+    x = NULL,
+    y = "Porcentaje dentro de la posición residencial",
+    fill = "Clase",
+    caption = "Distribución ponderada."
+  ) +
+  ggplot2::theme_minimal(
+    base_size = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.minor =
+      ggplot2::element_blank(),
+
+    panel.grid.major.x =
+      ggplot2::element_blank(),
+
+    axis.text.x =
+      ggplot2::element_text(
+        angle = 15,
+        hjust = 1
+      ),
+
+    plot.title =
+      ggplot2::element_text(
+        face = "bold"
+      ),
+
+    legend.position =
+      "bottom"
+  )
+
+figura_tenencia
+```
+
+# Distribución por condición de actividad
+
+```{r}
+tabla_clases_actividad <- calcular_distribucion_clases(
+  datos = base_clasificada,
+  variable_grupo = "condicion_actividad",
+  etiqueta_variable = "Condición de actividad"
+)
+```
+
+```{r}
+figura_actividad <- ggplot2::ggplot(
+  tabla_clases_actividad,
+  ggplot2::aes(
+    x = grupo,
+    y = porcentaje_clase_dentro_grupo,
+    fill = clase_etiqueta
+  )
+) +
+  ggplot2::geom_col(
+    width = 0.72
+  ) +
+  ggplot2::geom_text(
+    ggplot2::aes(
+      label = dplyr::if_else(
+        porcentaje_clase_dentro_grupo >= 7,
+        paste0(
+          round(
+            porcentaje_clase_dentro_grupo,
+            1
+          ),
+          "%"
+        ),
+        ""
+      ),
+      color = color_texto
+    ),
+    position = ggplot2::position_stack(
+      vjust = 0.5
+    ),
+    size = 3.2,
+    show.legend = FALSE
+  ) +
+  ggplot2::scale_color_identity() +
+  escala_relleno_clases() +
+  ggplot2::scale_y_continuous(
+    labels = scales::label_percent(
+      scale = 1
+    )
+  ) +
+  ggplot2::labs(
+    title = "Clases de inseguridad según condición de actividad",
+    x = NULL,
+    y = "Porcentaje dentro de la condición de actividad",
+    fill = "Clase",
+    caption = "Distribución ponderada."
+  ) +
+  ggplot2::theme_minimal(
+    base_size = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.minor =
+      ggplot2::element_blank(),
+
+    panel.grid.major.x =
+      ggplot2::element_blank(),
+
+    axis.text.x =
+      ggplot2::element_text(
+        angle = 15,
+        hjust = 1
+      ),
+
+    plot.title =
+      ggplot2::element_text(
+        face = "bold"
+      ),
+
+    legend.position =
+      "bottom"
+  )
+
+figura_actividad
+```
+
+# Distribución por género y estructura parental
+
+```{r}
+tabla_clases_familias <- calcular_distribucion_clases(
+  datos = base_clasificada,
+  variable_grupo =
+    "grupo_genero_estructura_menores",
+  etiqueta_variable =
+    "Género y estructura parental"
+)
+```
+
+```{r}
+figura_familias <- ggplot2::ggplot(
+  tabla_clases_familias,
+  ggplot2::aes(
+    x = grupo,
+    y = porcentaje_clase_dentro_grupo,
+    fill = clase_etiqueta
+  )
+) +
+  ggplot2::geom_col(
+    width = 0.72
+  ) +
+  ggplot2::geom_text(
+    ggplot2::aes(
+      label = dplyr::if_else(
+        porcentaje_clase_dentro_grupo >= 7,
+        paste0(
+          round(
+            porcentaje_clase_dentro_grupo,
+            1
+          ),
+          "%"
+        ),
+        ""
+      ),
+      color = color_texto
+    ),
+    position = ggplot2::position_stack(
+      vjust = 0.5
+    ),
+    size = 3.1,
+    show.legend = FALSE
+  ) +
+  ggplot2::scale_color_identity() +
+  escala_relleno_clases() +
+  ggplot2::scale_y_continuous(
+    labels = scales::label_percent(
+      scale = 1
+    )
+  ) +
+  ggplot2::labs(
+    title = "Clases de inseguridad según género y estructura parental",
+    subtitle = "Personas de 18 a 59 años que viven en hogares con menores",
+    x = NULL,
+    y = "Porcentaje dentro del grupo familiar",
+    fill = "Clase",
+    caption = "La estructura parental se incorpora como variable externa."
+  ) +
+  ggplot2::theme_minimal(
+    base_size = 12
+  ) +
+  ggplot2::theme(
+    panel.grid.minor =
+      ggplot2::element_blank(),
+
+    panel.grid.major.x =
+      ggplot2::element_blank(),
+
+    axis.text.x =
+      ggplot2::element_text(
+        angle = 25,
+        hjust = 1
+      ),
+
+    plot.title =
+      ggplot2::element_text(
+        face = "bold"
+      ),
+
+    legend.position =
+      "bottom"
+  )
+
+figura_familias
+```
+
+# Variables económicas complementarias
+
+## Cambio reciente del ingreso
+
+```{r}
+tabla_clases_cambio_ingreso <- calcular_distribucion_clases(
+  datos = base_clasificada,
+  variable_grupo = "cambio_ingreso",
+  etiqueta_variable = "Cambio reciente del ingreso"
+)
+```
+
+## Presencia de deuda
+
+```{r}
+tabla_clases_deuda <- calcular_distribucion_clases(
+  datos = base_clasificada,
+  variable_grupo = "deuda",
+  etiqueta_variable = "Presencia de deuda"
+)
+```
+
+```{r}
+tabla_variables_complementarias <- dplyr::bind_rows(
+  tabla_clases_cambio_ingreso,
+  tabla_clases_deuda
+)
+```
+
+```{r}
+knitr::kable(
+  tabla_variables_complementarias |>
+    dplyr::mutate(
+      frecuencia_ponderada = round(
+        frecuencia_ponderada
+      ),
+
+      porcentaje_clase_dentro_grupo = round(
+        porcentaje_clase_dentro_grupo,
+        1
+      )
+    ),
+  caption = "Distribución de clases según condiciones económicas complementarias"
+)
+```
+
+# Composición social de las clases
+
+Además de preguntar qué clase predomina dentro de cada grupo, resulta útil observar quiénes componen cada clase.
+
+```{r}
+tabla_composicion_genero <- calcular_composicion_clases(
+  datos = base_clasificada,
+  variable_grupo = "genero",
+  etiqueta_variable = "Género"
+)
+
+tabla_composicion_ingreso <- calcular_composicion_clases(
+  datos = base_clasificada,
+  variable_grupo = "posicion_ingreso_3",
+  etiqueta_variable = "Posición de ingreso"
+)
+
+tabla_composicion_educacion <- calcular_composicion_clases(
+  datos = base_clasificada,
+  variable_grupo = "nivel_educacional_3",
+  etiqueta_variable = "Nivel educacional"
+)
+
+tabla_composicion_tenencia <- calcular_composicion_clases(
+  datos = base_clasificada,
+  variable_grupo = "tenencia_vivienda_3",
+  etiqueta_variable = "Tenencia de vivienda"
+)
+
+tabla_composicion_actividad <- calcular_composicion_clases(
+  datos = base_clasificada,
+  variable_grupo = "condicion_actividad",
+  etiqueta_variable = "Condición de actividad"
+)
+
+tabla_composicion_social <- dplyr::bind_rows(
+  tabla_composicion_genero,
+  tabla_composicion_ingreso,
+  tabla_composicion_educacion,
+  tabla_composicion_tenencia,
+  tabla_composicion_actividad
+)
+```
+
+# Resumen de la solución
+
+```{r}
+resumen_solucion_elegida <- tabla_ajuste |>
+  dplyr::filter(
+    clases ==
+      numero_clases_elegido
+  ) |>
+  dplyr::mutate(
+    descripcion = paste0(
+      "Solución principal de ",
+      numero_clases_elegido,
+      " clases"
+    ),
+    .before = 1
+  )
+```
+
+```{r}
+knitr::kable(
+  resumen_solucion_elegida |>
+    dplyr::mutate(
+      dplyr::across(
+        where(
+          is.numeric
+        ),
+        ~ round(
+          .x,
+          3
+        )
+      )
+    ),
+  caption = "Resumen del ajuste y la clasificación de la solución elegida"
+)
+```
+
+# Exportación de figuras
+
+```{r}
+figuras_exportar <- list(
+  "06_comparacion_ajuste" =
+    figura_ajuste,
+
+  "06_calidad_clasificacion" =
+    figura_clasificacion,
+
+  "06_perfiles_clases" =
+    figura_perfiles,
+
+  "06_prevalencia_clases" =
+    figura_prevalencia_clases,
+
+  "06_clases_segun_genero" =
+    figura_genero,
+
+  "06_clases_segun_sexo_edad" =
+    figura_sexo_edad,
+
+  "06_clases_segun_ingreso" =
+    figura_ingreso,
+
+  "06_clases_segun_educacion" =
+    figura_educacion,
+
+  "06_clases_segun_tenencia" =
+    figura_tenencia,
+
+  "06_clases_segun_actividad" =
+    figura_actividad,
+
+  "06_clases_segun_estructura_parental" =
+    figura_familias
+)
+```
+
+```{r}
+for (
+  nombre_figura in
+  names(
+    figuras_exportar
+  )
+) {
+
+  grafico_actual <-
+    figuras_exportar[[nombre_figura]]
+
+  ggplot2::ggsave(
+    filename = file.path(
+      ruta_figuras,
+      paste0(
+        nombre_figura,
+        ".png"
+      )
+    ),
+    plot = grafico_actual,
+    width = 11,
+    height = 7.5,
+    units = "in",
+    dpi = 300
+  )
+
+  ggplot2::ggsave(
+    filename = file.path(
+      ruta_figuras,
+      paste0(
+        nombre_figura,
+        ".svg"
+      )
+    ),
+    plot = grafico_actual,
+    width = 11,
+    height = 7.5,
+    units = "in"
+  )
+}
+```
+
+# Exportación de tablas CSV
+
+```{r}
+tablas_csv <- list(
+  "06_cobertura_indicadores.csv" =
+    tabla_cobertura_indicadores,
+
+  "06_revision_indicadores.csv" =
+    tabla_revision_indicadores,
+
+  "06_revision_variables_externas.csv" =
+    tabla_revision_variables_externas,
+
+  "06_muestra_analitica.csv" =
+    tabla_muestra,
+
+  "06_prevalencias_indicadores.csv" =
+    tabla_prevalencias_indicadores,
+
+  "06_comparacion_ajuste.csv" =
+    tabla_ajuste,
+
+  "06_diccionario_clases.csv" =
+    diccionario_clases,
+
+  "06_perfiles_clases.csv" =
+    tabla_perfiles_clases,
+
+  "06_tamanos_clases.csv" =
+    tabla_tamanos_clase,
+
+  "06_clases_segun_genero.csv" =
+    tabla_clases_genero,
+
+  "06_clases_segun_sexo_edad.csv" =
+    tabla_clases_sexo_edad,
+
+  "06_clases_segun_ingreso.csv" =
+    tabla_clases_ingreso,
+
+  "06_clases_segun_educacion.csv" =
+    tabla_clases_educacion,
+
+  "06_clases_segun_tenencia.csv" =
+    tabla_clases_tenencia,
+
+  "06_clases_segun_actividad.csv" =
+    tabla_clases_actividad,
+
+  "06_clases_segun_familias.csv" =
+    tabla_clases_familias,
+
+  "06_variables_complementarias.csv" =
+    tabla_variables_complementarias,
+
+  "06_composicion_social_clases.csv" =
+    tabla_composicion_social,
+
+  "06_resumen_solucion_elegida.csv" =
+    resumen_solucion_elegida
+)
+```
+
+```{r}
+purrr::iwalk(
+  tablas_csv,
+  function(
+      tabla,
+      nombre_archivo
+  ) {
+
+    readr::write_csv(
+      tabla,
+      file.path(
+        ruta_tablas,
+        nombre_archivo
+      ),
+      na = ""
+    )
+  }
+)
+```
+
+# Libro Excel consolidado
+
+```{r}
+archivo_excel <- file.path(
+  ruta_tablas,
+  "06_clases_latentes_inseguridad_subjetiva.xlsx"
+)
+
+tablas_excel <- list(
+  "Muestra" =
+    tabla_muestra,
+
+  "Cobertura indicadores" =
+    tabla_cobertura_indicadores,
+
+  "Revisión indicadores" =
+    tabla_revision_indicadores,
+
+  "Variables externas" =
+    tabla_revision_variables_externas,
+
+  "Prevalencias" =
+    tabla_prevalencias_indicadores,
+
+  "Comparación ajuste" =
+    tabla_ajuste,
+
+  "Diccionario clases" =
+    diccionario_clases,
+
+  "Perfiles clases" =
+    tabla_perfiles_clases,
+
+  "Tamaños clases" =
+    tabla_tamanos_clase,
+
+  "Clases por género" =
+    tabla_clases_genero,
+
+  "Clases por sexo edad" =
+    tabla_clases_sexo_edad,
+
+  "Clases por ingreso" =
+    tabla_clases_ingreso,
+
+  "Clases por educación" =
+    tabla_clases_educacion,
+
+  "Clases por tenencia" =
+    tabla_clases_tenencia,
+
+  "Clases por actividad" =
+    tabla_clases_actividad,
+
+  "Clases por familias" =
+    tabla_clases_familias,
+
+  "Complementarias" =
+    tabla_variables_complementarias,
+
+  "Composición social" =
+    tabla_composicion_social,
+
+  "Resumen solución" =
+    resumen_solucion_elegida
+)
+```
+
+```{r}
+libro_salida <- openxlsx::createWorkbook()
+
+estilo_encabezado <- openxlsx::createStyle(
+  textDecoration = "bold",
+  halign = "center",
+  valign = "center",
+  wrapText = TRUE
+)
+
+for (
+  nombre_hoja in
+  names(
+    tablas_excel
+  )
+) {
+
+  tabla_actual <-
+    tablas_excel[[nombre_hoja]]
+
+  nombre_hoja_seguro <- substr(
+    nombre_hoja,
+    1,
+    31
+  )
+
+  openxlsx::addWorksheet(
+    libro_salida,
+    nombre_hoja_seguro
+  )
+
+  openxlsx::writeDataTable(
+    libro_salida,
+    sheet = nombre_hoja_seguro,
+    x = tabla_actual
+  )
+
+  openxlsx::freezePane(
+    libro_salida,
+    sheet = nombre_hoja_seguro,
+    firstRow = TRUE
+  )
+
+  if (
+    ncol(
+      tabla_actual
+    ) > 0
+  ) {
+
+    openxlsx::addStyle(
+      libro_salida,
+      sheet = nombre_hoja_seguro,
+      style = estilo_encabezado,
+      rows = 1,
+      cols = seq_len(
+        ncol(
+          tabla_actual
+        )
+      ),
+      gridExpand = TRUE
+    )
+
+    openxlsx::setColWidths(
+      libro_salida,
+      sheet = nombre_hoja_seguro,
+      cols = seq_len(
+        ncol(
+          tabla_actual
+        )
+      ),
+      widths = "auto"
+    )
+  }
+}
+
+openxlsx::saveWorkbook(
+  libro_salida,
+  file = archivo_excel,
+  overwrite = TRUE
+)
+```
+
+# Exportación de objetos reutilizables
+
+```{r}
+saveRDS(
+  modelos_lca,
+  file.path(
+    ruta_objetos,
+    "06_modelos_enumeracion_lca.rds"
+  )
+)
+
+saveRDS(
+  modelo_elegido,
+  file.path(
+    ruta_objetos,
+    "06_modelo_lca_elegido.rds"
+  )
+)
+
+saveRDS(
+  base_clasificada,
+  file.path(
+    ruta_objetos,
+    "06_base_con_clases_y_posteriores.rds"
+  )
+)
+
+saveRDS(
+  tabla_ajuste,
+  file.path(
+    ruta_objetos,
+    "06_tabla_ajuste_lca.rds"
+  )
+)
+
+saveRDS(
+  tabla_perfiles_clases,
+  file.path(
+    ruta_objetos,
+    "06_perfiles_clases.rds"
+  )
+)
+
+saveRDS(
+  diccionario_clases,
+  file.path(
+    ruta_objetos,
+    "06_diccionario_clases.rds"
+  )
+)
+```
+
+# Resumen automático
+
+```{r}
+cat(
+  "Casos en la base de origen:",
+  nrow(
+    base_preparada
+  ),
+  "\n"
+)
+
+cat(
+  "Casos completos utilizados:",
+  nrow(
+    base_lca
+  ),
+  "\n"
+)
+
+cat(
+  "Porcentaje de casos retenidos:",
+  round(
+    100 *
+      nrow(
+        base_lca
+      ) /
+      nrow(
+        base_preparada
+      ),
+    1
+  ),
+  "%.\n"
+)
+
+cat(
+  "Caché de modelos:",
+  ifelse(
+    cache_modelos_valida,
+    "reutilizada",
+    "actualizada"
+  ),
+  ".\n"
+)
+
+cat(
+  "Soluciones estimadas:",
+  paste(
+    secuencia_clases[
+      !purrr::map_lgl(
+        modelos_lca,
+        is.null
+      )
+    ],
+    collapse = ", "
+  ),
+  "clases.\n"
+)
+
+cat(
+  "Solución seleccionada:",
+  numero_clases_elegido,
+  "clases.\n"
+)
+
+cat(
+  "Entropía normalizada de la solución:",
+  round(
+    resumen_solucion_elegida$entropia[[1]],
+    3
+  ),
+  ".\n"
+)
+
+cat(
+  "Probabilidad posterior máxima media:",
+  round(
+    resumen_solucion_elegida$posterior_maxima_media[[1]],
+    3
+  ),
+  ".\n"
+)
+
+cat(
+  "Porcentaje ponderado de la clase más pequeña:",
+  round(
+    min(
+      tabla_tamanos_clase$porcentaje_ponderado
+    ),
+    1
+  ),
+  "%.\n"
+)
+
+cat(
+  "Libro Excel:",
+  normalizePath(
+    archivo_excel,
+    winslash = "/",
+    mustWork = FALSE
+  ),
+  "\n"
+)
+```
+
+# Información de la sesión
+
+```{r}
+sessionInfo()
+```
