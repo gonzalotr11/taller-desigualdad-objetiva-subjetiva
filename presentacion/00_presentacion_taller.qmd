@@ -1,0 +1,2043 @@
+---
+title: "Mediciones de desigualdad objetiva y subjetiva"
+subtitle: "Convergencias, desajustes y configuraciones sociales"
+
+author:
+  - name: "Gonzalo Torres Rosales"
+    email: "go.torres@uc.cl"
+    url: "https://gonzalotr11.github.io/"
+    affiliations:
+      - name: "Instituto de Sociología, Pontificia Universidad Católica de Chile"
+      - name: "Investigador Asociado, Observatorio de Desigualdades"
+      - name: "ISI-Munich — The Munich International Stone Center for Inequality Research"
+
+date: today
+lang: es
+
+resources:
+  - logo_puc.png
+  - logo_obde.png
+  - logo_isi.png
+
+format:
+  revealjs:
+    theme:
+      - simple
+      - estilo_taller.scss
+    slide-level: 2
+    slide-number: c/t
+    navigation-mode: linear
+    controls: true
+    controls-layout: bottom-right
+    progress: true
+    transition: fade
+    background-transition: fade
+    center: false
+    width: 1366
+    height: 768
+    margin: 0.055
+    hash: true
+    chalkboard: false
+    preview-links: auto
+    code-fold: true
+    fig-responsive: true
+    menu: true
+    embed-resources: true
+
+execute:
+  echo: false
+  warning: false
+  message: false
+  freeze: false
+
+knitr:
+  opts_chunk:
+    fig.align: center
+    out.width: "100%"
+    dpi: 150
+---
+
+```{r}
+#| include: false
+
+library(knitr)
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(tibble)
+
+# -------------------------------------------------------------------------
+# 1. Ruta principal del proyecto
+# -------------------------------------------------------------------------
+
+ruta_proyecto <- paste0(
+  "C:/Users/PC/OneDrive/Postgrados/OBDE/",
+  "Taller Med Obj Subj"
+)
+
+ruta_outputs <- file.path(
+  ruta_proyecto,
+  "outputs"
+)
+
+# -------------------------------------------------------------------------
+# 2. Carpetas de figuras
+# -------------------------------------------------------------------------
+
+ruta_figuras_acm <- file.path(
+  ruta_outputs,
+  "05_acm_objetivo_subjetivo",
+  "figuras"
+)
+
+ruta_figuras_lca <- file.path(
+  ruta_outputs,
+  "06_clases_latentes_inseguridad_subjetiva",
+  "figuras"
+)
+
+ruta_figuras_panel <- file.path(
+  ruta_outputs,
+  "07_transiciones_deuda_ingreso",
+  "figuras"
+)
+
+# -------------------------------------------------------------------------
+# 3. Verificación de rutas
+# -------------------------------------------------------------------------
+
+rutas_requeridas <- c(
+  ruta_outputs,
+  ruta_figuras_acm,
+  ruta_figuras_lca,
+  ruta_figuras_panel
+)
+
+rutas_faltantes <- rutas_requeridas[
+  !dir.exists(
+    rutas_requeridas
+  )
+]
+
+if (
+  length(
+    rutas_faltantes
+  ) >
+    0
+) {
+  stop(
+    paste0(
+      "No se encontraron las siguientes rutas:\n",
+      paste(
+        rutas_faltantes,
+        collapse = "\n"
+      )
+    )
+  )
+}
+
+# -------------------------------------------------------------------------
+# 4. Función segura para insertar figuras
+# -------------------------------------------------------------------------
+
+incluir_figura_segura <- function(
+    ruta_figura,
+    texto_error = "No se encontró la figura"
+) {
+
+  if (
+    file.exists(
+      ruta_figura
+    )
+  ) {
+
+    knitr::include_graphics(
+      ruta_figura
+    )
+
+  } else {
+
+    knitr::asis_output(
+      paste0(
+        "<div class='callout-box'>",
+        "<div class='callout-title'>",
+        texto_error,
+        "</div>",
+        "<p>",
+        ruta_figura,
+        "</p>",
+        "</div>"
+      )
+    )
+  }
+}
+
+# -------------------------------------------------------------------------
+# 5. Inventario de figuras disponibles
+# -------------------------------------------------------------------------
+
+figuras_acm_disponibles <- list.files(
+  path = ruta_figuras_acm,
+  pattern = "\\.(png|svg)$",
+  full.names = FALSE,
+  ignore.case = TRUE
+)
+
+figuras_lca_disponibles <- list.files(
+  path = ruta_figuras_lca,
+  pattern = "\\.(png|svg)$",
+  full.names = FALSE,
+  ignore.case = TRUE
+)
+
+figuras_panel_disponibles <- list.files(
+  path = ruta_figuras_panel,
+  pattern = "\\.(png|svg)$",
+  full.names = FALSE,
+  ignore.case = TRUE
+)
+
+message(
+  paste0(
+    "Figuras ACM encontradas: ",
+    length(
+      figuras_acm_disponibles
+    )
+  )
+)
+
+message(
+  paste0(
+    "Figuras LCA encontradas: ",
+    length(
+      figuras_lca_disponibles
+    )
+  )
+)
+
+message(
+  paste0(
+    "Figuras panel encontradas: ",
+    length(
+      figuras_panel_disponibles
+    )
+  )
+)
+```
+
+## Propósito del taller {.top-slide}
+
+:::: callout-box
+::: callout-title
+Tres formas complementarias de estudiar desigualdades multidimensionales
+:::
+::::
+
+1.  Relaciones entre categorías.
+2.  Configuraciones recurrentes entre personas.
+3.  Trayectorias de hogares a través del tiempo.
+
+::: notes
+Este taller parte de una inquietud bastante simple.
+
+En ciencias sociales solemos medir desigualdad mediante variables relativamente bien conocidas, como ingreso, educación, empleo o vivienda.
+
+Estas variables son indispensables, pero muchas veces no alcanzan para describir cómo se distribuyen conjuntamente los recursos, las vulnerabilidades y las experiencias económicas.
+
+La propuesta de hoy es revisar tres formas complementarias de abordar esa complejidad.
+
+Primero, analizar relaciones entre categorías.
+
+Segundo, identificar configuraciones recurrentes entre personas.
+
+Tercero, observar cómo los hogares se mueven entre estados a través del tiempo.
+:::
+
+## Pregunta guía {.top-slide}
+
+:::: callout-box
+::: callout-title
+¿Qué perdemos cuando reducimos la desigualdad a una sola variable?
+:::
+::::
+
+- ¿Personas con el mismo ingreso viven la misma situación?
+- ¿La inseguridad económica tiene una sola forma?
+- ¿Una fotografía transversal permite observar movilidad?
+
+::: notes
+No se trata de negar la utilidad del ingreso ni de otros indicadores clásicos.
+
+La pregunta es qué queda fuera cuando una sola variable resume la posición económica.
+
+Dos hogares con ingresos parecidos pueden diferir en vivienda, deuda, reservas, redes de apoyo o capacidad de enfrentar una emergencia.
+
+Del mismo modo, dos personas pueden reportar inseguridad económica, pero por razones bastante distintas.
+
+Además, una fotografía transversal no permite saber si una posición es estable, transitoria o parte de una trayectoria de deterioro o mejora.
+:::
+
+## Tres maneras de estudiar la desigualdad
+
+:::::::::::: columns
+::::: {.column width="33%"}
+:::: method-card
+::: method-card-title
+Relaciones
+:::
+
+¿Qué categorías aparecen próximas dentro de un espacio multidimensional?
+
+<br>
+
+**Análisis de correspondencias múltiples**
+::::
+:::::
+
+::::: {.column width="33%"}
+:::: method-card
+::: method-card-title
+Configuraciones
+:::
+
+¿Qué patrones recurrentes aparecen entre personas o casos?
+
+<br>
+
+**Clases latentes**
+::::
+:::::
+
+::::: {.column width="33%"}
+:::: method-card
+::: method-card-title
+Trayectorias
+:::
+
+¿Cómo cambian los hogares entre estados a través del tiempo?
+
+<br>
+
+**Panel longitudinal**
+::::
+:::::
+::::::::::::
+
+::: notes
+Los tres ejercicios responden a problemas diferentes.
+
+El análisis de correspondencias múltiples nos permite observar cómo se relacionan categorías dentro de un espacio multidimensional.
+
+Las clases latentes desplazan la atención desde las categorías hacia los casos y buscan identificar patrones recurrentes de respuestas.
+
+El panel longitudinal agrega el tiempo y permite analizar transiciones entre estados.
+
+La secuencia general es relaciones, configuraciones y trayectorias.
+:::
+
+## Objetivo y subjetivo no son opuestos
+
+::::: columns
+::: {.column width="50%"}
+### Condiciones objetivas
+
+- Ingreso
+- Educación
+- Empleo
+- Vivienda
+- Deuda
+- Composición del hogar
+:::
+
+::: {.column width="50%"}
+### Evaluaciones subjetivas
+
+- Dificultad para llegar a fin de mes
+- Protección ante gastos de salud
+- Capacidad de enfrentar emergencias
+- Disponibilidad de apoyo monetario
+- Riesgo económico percibido
+:::
+:::::
+
+::: callout-box
+Las evaluaciones subjetivas también son socialmente producidas: dependen de recursos, obligaciones, expectativas y comparaciones.
+:::
+
+::: notes
+Voy a usar las expresiones objetivo y subjetivo en un sentido operativo.
+
+Las variables objetivas describen condiciones observables o institucionalmente registrables.
+
+Las subjetivas recogen evaluaciones que las personas hacen sobre su situación.
+
+Esta distinción no significa que unas sean reales y las otras imaginarias.
+
+Las evaluaciones subjetivas también tienen bases sociales. Dependen de recursos, expectativas, obligaciones, experiencias previas y comparaciones con otras personas.
+:::
+
+## Dos hogares con el mismo ingreso
+
+::::: columns
+::: {.column width="50%"}
+### Hogar A
+
+- Vivienda propia pagada
+- Sin deuda
+- Ahorros disponibles
+- Apoyo familiar ante emergencias
+:::
+
+::: {.column width="50%"}
+### Hogar B
+
+- Arriendo
+- Deuda elevada
+- Sin reservas
+- Sin apoyo monetario cercano
+:::
+:::::
+
+::: callout-box
+El mismo ingreso corriente puede sostener posiciones económicas muy distintas.
+:::
+
+::: notes
+Este ejemplo muestra por qué una sola variable no agota la posición económica.
+
+Podemos imaginar dos hogares con el mismo ingreso mensual.
+
+Uno tiene vivienda pagada, ahorros y redes de apoyo.
+
+El otro paga arriendo, mantiene deuda y no dispone de reservas.
+
+Aunque su ingreso corriente sea equivalente, su capacidad para absorber shocks es distinta.
+
+También pueden diferir en el modo en que experimentan su situación económica.
+:::
+
+## Tres dificultades analíticas
+
+:::::::::::: columns
+::::: {.column width="33%"}
+:::: {.method-card .compact}
+::: method-card-title
+Multidimensionalidad
+:::
+
+Varias dimensiones operan simultáneamente.
+::::
+:::::
+
+::::: {.column width="33%"}
+:::: {.method-card .compact}
+::: method-card-title
+Heterogeneidad
+:::
+
+Una misma intensidad puede contener combinaciones distintas.
+::::
+:::::
+
+::::: {.column width="33%"}
+:::: {.method-card .compact}
+::: method-card-title
+Temporalidad
+:::
+
+Una posición puede ser estable o transitoria.
+::::
+:::::
+::::::::::::
+
+::: notes
+Cada método responde a una dificultad particular.
+
+La primera es la multidimensionalidad. Muchas variables están asociadas y es difícil interpretarlas por separado.
+
+La segunda es la heterogeneidad. Personas con niveles parecidos de inseguridad pueden presentar composiciones distintas.
+
+La tercera es la temporalidad. Una distribución transversal no muestra quién permanece, quién mejora o quién empeora.
+:::
+
+## Estrategia del taller
+
+| Ejercicio | Pregunta | Resultado | Unidad interpretativa |
+|------------------|------------------|------------------|------------------|
+| ACM | ¿Qué categorías se relacionan? | Espacio multidimensional | Categorías |
+| LCA | ¿Qué configuraciones aparecen? | Clases probabilísticas | Personas |
+| Panel | ¿Cómo cambian los estados? | Transiciones | Hogares en el tiempo |
+
+::: notes
+Cada ejercicio produce una unidad de interpretación distinta.
+
+En el ACM interpretamos principalmente categorías y dimensiones.
+
+En las clases latentes interpretamos perfiles probabilísticos de personas.
+
+En el panel interpretamos transiciones y trayectorias de hogares.
+
+Por eso no son técnicas intercambiables.
+:::
+
+## Datos utilizados
+
+::::: columns
+::: {.column width="50%"}
+### Encuesta de Bienestar Social 2023
+
+- Personas adultas
+- Condiciones objetivas
+- Evaluaciones subjetivas
+- Usada en ACM y clases latentes
+:::
+
+::: {.column width="50%"}
+### Encuesta Financiera de Hogares
+
+- Panel 2007–2011–2014
+- Hogares observados en el tiempo
+- Ingreso efectivo
+- Deuda total
+- Usada en análisis de transiciones
+:::
+:::::
+
+::: notes
+Para los primeros dos ejercicios usamos la Encuesta de Bienestar Social 2023.
+
+Para el tercer ejercicio usamos un panel de hogares de la Encuesta Financiera de Hogares, con observaciones en 2007, 2011 y 2014.
+
+La unidad de análisis cambia.
+
+En la EBS trabajamos con personas.
+
+En la EFH trabajamos con hogares.
+:::
+
+## Ejercicio 1: análisis de correspondencias múltiples {.section-divider}
+
+:::::: section-title
+::: eyebrow
+Relaciones entre categorías
+:::
+
+::: section-main-title
+Análisis de correspondencias múltiples
+:::
+
+::: section-question
+¿Cómo se ordenan conjuntamente posiciones objetivas y experiencias subjetivas?
+:::
+::::::
+
+::: notes
+Entramos al primer ejercicio.
+
+Aquí todavía no buscamos clasificar personas.
+
+Buscamos representar relaciones entre categorías dentro de un espacio común.
+:::
+
+## Pregunta del primer ejercicio
+
+:::: callout-box
+::: callout-title
+¿Cómo se organizan conjuntamente las posiciones objetivas y las experiencias subjetivas?
+:::
+::::
+
+<br>
+
+**Interés principal**
+
+- Identificar proximidades entre categorías.
+- Reconocer oposiciones en el espacio multidimensional.
+- Observar dónde se proyectan grupos sociales relevantes.
+
+::: notes
+El primer ejercicio intenta representar un sistema de relaciones entre categorías.
+
+Queremos observar qué categorías tienden a aparecer próximas y cuáles ocupan posiciones opuestas dentro de un espacio multidimensional.
+
+El resultado principal no será una clasificación de personas, sino un mapa de relaciones.
+:::
+
+## Intuición del ACM
+
+::::: columns
+::: {.column width="43%"}
+### Lectura básica
+
+- Cada punto representa una categoría.
+- La cercanía sugiere perfiles de respuesta parecidos.
+- Los ejes resumen oposiciones principales.
+- Las categorías alejadas del origen suelen ser más informativas.
+:::
+
+::: {.column width="57%"}
+```{r}
+#| fig-width: 6.5
+#| fig-height: 4.1
+#| echo: false
+
+diagrama_acm <- tibble::tibble(
+  x = c(
+    -1.15,
+    -0.82,
+    0.92,
+    1.18,
+    0.08
+  ),
+
+  y = c(
+    0.58,
+    -0.38,
+    0.45,
+    -0.28,
+    0.04
+  ),
+
+  etiqueta = c(
+    "Sin reservas",
+    "Fin de mes difícil",
+    "Protección en salud",
+    "Apoyo monetario",
+    "Categoría frecuente"
+  )
+)
+
+ggplot(
+  diagrama_acm,
+  aes(
+    x = x,
+    y = y,
+    label = etiqueta
+  )
+) +
+  geom_hline(
+    yintercept = 0,
+    linewidth = 0.35,
+    color = "grey70"
+  ) +
+  geom_vline(
+    xintercept = 0,
+    linewidth = 0.35,
+    color = "grey70"
+  ) +
+  geom_point(
+    size = 4.5,
+    color = "#5B2A86"
+  ) +
+  geom_text(
+    nudge_y = 0.13,
+    size = 4
+  ) +
+  coord_equal(
+    xlim = c(
+      -1.65,
+      1.65
+    ),
+    ylim = c(
+      -1,
+      1
+    )
+  ) +
+  theme_void()
+```
+:::
+:::::
+
+::: notes
+El análisis de correspondencias múltiples puede pensarse como una forma de representar categorías de varias variables en un espacio común.
+
+Categorías cercanas tienden a compartir perfiles de respuesta.
+
+Categorías alejadas representan patrones más diferentes.
+
+La distancia no debe interpretarse directamente como una correlación, pero sí como una señal de asociación dentro del espacio construido.
+:::
+
+## Qué entra al análisis
+
+::::: columns
+::: {.column width="50%"}
+### Variables activas objetivas
+
+- Posición de ingreso
+- Nivel educacional
+- Tenencia de vivienda
+:::
+
+::: {.column width="50%"}
+### Variables activas subjetivas
+
+- Facilidad para llegar a fin de mes
+- Fragilidad ante pérdida de ingresos
+- Protección financiera en salud
+:::
+:::::
+
+::: callout-box
+Las variables activas construyen el espacio. Los grupos sociales se proyectan posteriormente como variables suplementarias.
+:::
+
+::: notes
+El espacio se construye con seis variables activas.
+
+Tres corresponden a condiciones objetivas: posición de ingreso, educación y tenencia de vivienda.
+
+Las otras tres corresponden a evaluaciones subjetivas: facilidad para llegar a fin de mes, fragilidad ante una pérdida de ingresos y protección financiera ante gastos de salud.
+
+Los grupos sexo-etarios, la condición de actividad y la estructura parental se incorporan como variables suplementarias. Por tanto, ayudan a interpretar el espacio, pero no intervienen en la construcción de los ejes.
+:::
+
+## Muestra analítica
+
+:::::: columns
+:::: {.column width="40%"}
+::: metric
+7.500
+:::
+
+casos completos en las seis variables activas
+::::
+
+::: {.column width="60%"}
+- Universo inicial: 7.612 personas
+- Edad: 18 a 59 años
+- Retención analítica: 98,5%
+- Cobertura muy alta de las variables activas
+:::
+::::::
+
+::: callout-box
+La selección por casos completos redujo muy poco la muestra disponible.
+:::
+
+::: notes
+El universo inicial contiene 7.612 personas de 18 a 59 años.
+
+El análisis de correspondencias múltiples se estima con 7.500 casos completos en las seis variables activas.
+
+Esto representa una retención de 98,5 por ciento, por lo que la pérdida de casos es limitada.
+:::
+
+## Cómo leer un mapa de correspondencias
+
+:::::: columns
+::: {.column width="52%"}
+### Cuatro reglas
+
+1.  Mirar categorías alejadas del origen.
+2.  Identificar categorías próximas.
+3.  Observar oposiciones entre lados del eje.
+4.  Revisar contribuciones antes de nombrar dimensiones.
+:::
+
+:::: {.column width="48%"}
+::: callout-box
+La proximidad sugiere perfiles de respuesta semejantes, pero debe interpretarse junto con frecuencias, contribuciones y teoría.
+:::
+::::
+::::::
+
+::: notes
+Hay cuatro reglas básicas.
+
+Primero, las modalidades cercanas al origen suelen distinguir poco el espacio.
+
+Segundo, las modalidades próximas comparten perfiles de respuesta semejantes.
+
+Tercero, las modalidades ubicadas en extremos opuestos ayudan a interpretar los ejes.
+
+Cuarto, el nombre de una dimensión debe apoyarse en las contribuciones de las modalidades y no solamente en su posición visual.
+:::
+
+## Inercia explicada {.figure-only}
+
+```{r}
+#| out-width: "100%"
+#| echo: false
+
+archivo_acm_inercia <- file.path(
+  ruta_figuras_acm,
+  "05_inercia_acm_objetivo_subjetivo.png"
+)
+
+incluir_figura_segura(
+  archivo_acm_inercia
+)
+```
+
+::: notes
+La dimensión 1 explica 21,8 por ciento de la inercia.
+
+La dimensión 2 explica 13,4 por ciento.
+
+En conjunto, las dos primeras dimensiones acumulan 35,2 por ciento.
+
+El plano bidimensional ofrece una síntesis útil de la estructura principal, aunque no contiene toda la información del espacio.
+:::
+
+## Mapa ACM principal {.figure-only}
+
+```{r}
+#| out-width: "100%"
+#| echo: false
+
+archivo_acm_principal <- file.path(
+  ruta_figuras_acm,
+  "05_mapa_modalidades_objetivo_subjetivo.png"
+)
+
+incluir_figura_segura(
+  archivo_acm_principal
+)
+```
+
+::: notes
+Esta es la figura central del ejercicio.
+
+La primera dimensión organiza una oposición bastante clara.
+
+A la derecha aparecen ingresos altos, educación superior, facilidad para llegar a fin de mes, menor fragilidad y protección financiera en salud.
+
+A la izquierda aparecen ingresos bajos, educación básica o media, fragilidad intensa, dificultad para llegar a fin de mes y desprotección en salud.
+
+La primera dimensión articula, por tanto, condiciones objetivas y experiencias subjetivas dentro de un mismo gradiente.
+:::
+
+## Dimensión 1: protección y vulnerabilidad
+
+::::: columns
+::: {.column width="50%"}
+### Polo de mayor protección
+
+- Facilidad para llegar a fin de mes
+- Protección financiera en salud
+- Menor fragilidad
+- Ingresos altos
+- Educación superior
+:::
+
+::: {.column width="50%"}
+### Polo de mayor vulnerabilidad
+
+- Ingresos bajos
+- Educación básica o media
+- Fragilidad intensa
+- Dificultad para llegar a fin de mes
+- Desprotección financiera en salud
+:::
+:::::
+
+:::: callout-box
+::: callout-title
+Dimensión 1: protección económica objetiva y subjetiva
+:::
+::::
+
+::: notes
+La dimensión principal muestra una convergencia entre posición objetiva y evaluación subjetiva.
+
+Las personas con mejores recursos tienden a ubicarse junto a modalidades de mayor seguridad económica.
+
+En el extremo opuesto se acumulan menores recursos, fragilidad y dificultades económicas cotidianas.
+
+Por eso podemos interpretar el eje como un gradiente de protección económica objetiva y subjetiva.
+:::
+
+## Dimensión 2: una configuración menos lineal
+
+::::: columns
+::: {.column width="55%"}
+### Extremo positivo
+
+- Educación básica
+- Ingresos bajos
+- Vivienda cedida u otra
+- Facilidad para llegar a fin de mes
+- Menor fragilidad
+:::
+
+::: {.column width="45%"}
+### Extremo negativo
+
+- Vivienda arrendada
+- Educación superior
+- Ingresos altos o medios
+- Fragilidad intensa
+:::
+:::::
+
+::: callout-box
+La segunda dimensión separa configuraciones residenciales y posibles desacoples entre recursos objetivos y seguridad cotidiana.
+:::
+
+::: notes
+La segunda dimensión no reproduce simplemente una escala de mayor o menor seguridad.
+
+La modalidad que más contribuye a construirla es la vivienda arrendada.
+
+En un extremo se combinan arriendo, educación superior e ingresos altos o medios.
+
+En el otro aparecen vivienda cedida, ingresos bajos y educación básica, junto con facilidad para llegar a fin de mes y menor fragilidad.
+
+Esto sugiere que algunos arreglos residenciales pueden modificar la relación entre posición objetiva y experiencia económica cotidiana.
+
+Es una interpretación sustantiva del patrón, no una demostración causal.
+:::
+
+## Posiciones sexo-etarias {.figure-only}
+
+```{r}
+#| out-width: "100%"
+#| echo: false
+
+archivo_acm_sexo_edad <- file.path(
+  ruta_figuras_acm,
+  "05_dimension_1_sexo_edad.png"
+)
+
+incluir_figura_segura(
+  archivo_acm_sexo_edad
+)
+```
+
+::: notes
+Esta figura presenta las coordenadas medias ponderadas de los seis grupos sexo-etarios sobre la dimensión principal.
+
+Los hombres de 18 a 29 y de 30 a 44 años aparecen más hacia el polo protegido.
+
+Las mujeres de 30 a 44 y especialmente las mujeres de 45 a 59 años aparecen más hacia el polo vulnerable.
+
+Los hombres de 45 a 59 años también se ubican levemente en el lado vulnerable, pero menos que las mujeres del mismo tramo.
+
+La comparación es transversal. No representa trayectorias individuales de envejecimiento.
+:::
+
+## Género y estructura parental {.figure-only}
+
+```{r}
+#| out-width: "100%"
+#| echo: false
+
+archivo_acm_familias <- file.path(
+  ruta_figuras_acm,
+  "05_dimension_1_familias.png"
+)
+
+incluir_figura_segura(
+  archivo_acm_familias
+)
+```
+
+::: notes
+Entre las personas que viven en hogares con menores, la posición más vulnerable corresponde a las mujeres en hogares monoparentales.
+
+Las mujeres en hogares biparentales también se ubican hacia el polo vulnerable.
+
+Los hombres en hogares monoparentales ocupan una posición intermedia.
+
+Los hombres en hogares biparentales son el único grupo situado levemente hacia el polo protegido.
+
+El patrón sugiere una acumulación entre género y estructura parental.
+:::
+
+## Condición de actividad {.figure-only}
+
+```{r}
+#| out-width: "100%"
+#| echo: false
+
+archivo_acm_actividad <- file.path(
+  ruta_figuras_acm,
+  "05_mapa_condicion_actividad.png"
+)
+
+incluir_figura_segura(
+  archivo_acm_actividad
+)
+```
+
+::: notes
+La condición de actividad también se proyecta como variable suplementaria.
+
+Las personas ocupadas aparecen levemente hacia el polo protegido.
+
+Las personas desocupadas y quienes están fuera de la fuerza de trabajo se sitúan hacia el polo vulnerable.
+
+Estas posiciones son medias ponderadas y no representan efectos causales de la condición de actividad.
+:::
+
+## Interpretación sustantiva del ACM
+
+::: callout-box
+El espacio muestra una convergencia general entre recursos objetivos y seguridad subjetiva, junto con desacoples asociados especialmente a la posición residencial.
+:::
+
+<br>
+
+- La dimensión principal combina ingreso, educación y seguridad económica.
+- La segunda dimensión está fuertemente marcada por el arriendo.
+- Género, edad, parentalidad y actividad diferencian posiciones medias.
+- Las variables suplementarias interpretan el espacio, pero no construyen sus ejes.
+
+::: notes
+La conclusión sustantiva del ACM tiene dos componentes.
+
+Primero, existe una convergencia clara entre mejores posiciones objetivas y mayor seguridad subjetiva.
+
+Segundo, esa convergencia no es perfecta.
+
+La dimensión residencial, especialmente el arriendo y la vivienda cedida, introduce configuraciones que no siguen linealmente el gradiente de recursos.
+:::
+
+## Qué aprendemos con el ACM
+
+::::: columns
+::: {.column width="50%"}
+### Permite
+
+- Representar varias dimensiones simultáneamente.
+- Reconocer proximidades entre modalidades.
+- Identificar oposiciones y desacoples.
+- Proyectar grupos sociales.
+- Construir una lectura relacional.
+:::
+
+::: {.column width="50%"}
+### No permite
+
+- Clasificar inequívocamente personas.
+- Establecer causalidad.
+- Interpretar toda proximidad como sustantiva.
+- Observar trayectorias individuales.
+- Sustituir la teoría por el mapa.
+:::
+:::::
+
+::: notes
+El ACM permite organizar una estructura compleja de relaciones entre modalidades.
+
+No produce una clasificación de personas.
+
+Tampoco identifica causas ni trayectorias.
+
+Su valor principal está en mostrar cómo condiciones objetivas y subjetivas se relacionan dentro de un espacio común.
+:::
+
+## Transición al segundo ejercicio
+
+::::: callout-box
+::: callout-title
+El ACM organiza categorías.
+:::
+
+::: callout-title
+Ahora queremos organizar patrones de respuesta entre personas.
+:::
+:::::
+
+<br>
+
+> ¿Qué configuraciones recurrentes de inseguridad económica aparecen?
+
+::: notes
+Aquí hacemos la transición hacia las clases latentes.
+
+Cambia la unidad de interpretación.
+
+Ya no preguntamos principalmente qué categorías están próximas.
+
+Preguntamos qué combinaciones de respuestas aparecen repetidamente entre personas.
+:::
+
+## Ejercicio 2: clases latentes {.section-divider}
+
+:::::: section-title
+::: eyebrow
+Configuraciones de personas
+:::
+
+::: section-main-title
+Clases latentes
+:::
+
+::: section-question
+¿Qué combinaciones recurrentes de inseguridad económica aparecen?
+:::
+::::::
+
+::: notes
+Entramos al segundo ejercicio.
+
+Cambia la unidad de interpretación.
+
+En vez de organizar categorías, intentamos identificar patrones recurrentes entre personas.
+:::
+
+## Del espacio de categorías a los casos
+
+:::: callout-box
+::: callout-title
+¿Qué patrones de inseguridad subjetiva se repiten entre personas?
+:::
+::::
+
+<br>
+
+- El ACM organiza categorías.
+- La LCA estima perfiles probabilísticos de casos.
+- Las clases resumen combinaciones recurrentes de respuestas.
+
+::: notes
+En lugar de preguntar qué categorías están próximas, preguntamos si existen grupos de personas que tienden a presentar patrones similares de respuestas.
+
+Este es el enfoque centrado en casos.
+:::
+
+## Intuición de clases latentes
+
+:::::::::::: columns
+::::: {.column width="33%"}
+:::: {.method-card .compact}
+::: method-card-title
+Clase 1
+:::
+
+Baja probabilidad de inseguridad en casi todos los indicadores.
+::::
+:::::
+
+::::: {.column width="33%"}
+:::: {.method-card .compact}
+::: method-card-title
+Clase 2
+:::
+
+Probabilidades intermedias o selectivas de inseguridad.
+::::
+:::::
+
+::::: {.column width="33%"}
+:::: {.method-card .compact}
+::: method-card-title
+Clase 3
+:::
+
+Alta probabilidad de inseguridad en varias dimensiones.
+::::
+:::::
+::::::::::::
+
+::: notes
+El modelo supone que existe una variable categórica no observada que organiza parte de las asociaciones entre los indicadores.
+
+Cada clase se describe mediante probabilidades condicionales.
+
+Las clases no son grupos observados directamente. Son una representación probabilística estimada desde patrones de respuesta.
+:::
+
+## Indicadores de inseguridad
+
+::::: columns
+::: {.column width="50%"}
+### Presión presente
+
+- Dificultad para llegar a fin de mes
+- Disminución o presión de ingresos
+- Problemas asociados a obligaciones económicas
+:::
+
+::: {.column width="50%"}
+### Protección frente a shocks
+
+- Reservas insuficientes
+- Desprotección financiera en salud
+- Falta de apoyo monetario
+- Vulnerabilidad ante emergencias
+:::
+:::::
+
+::: callout-box
+Las clases solo pueden representar las dimensiones que incorporamos al modelo.
+:::
+
+::: notes
+Los indicadores buscan cubrir distintas dimensiones de la inseguridad económica.
+
+Algunos capturan presión presente.
+
+Otros capturan capacidad de enfrentar shocks.
+
+La decisión sobre qué indicadores incluir es sustantiva. Las clases solo pueden representar las dimensiones que incorporamos al modelo.
+:::
+
+## ¿Cuántas clases? {.figure-only}
+
+```{r}
+#| out-width: "100%"
+#| echo: false
+
+archivo_lca_ajuste <- file.path(
+  ruta_figuras_lca,
+  "06_comparacion_ajuste.png"
+)
+
+incluir_figura_segura(
+  archivo_lca_ajuste
+)
+```
+
+::: notes
+No existe un criterio único y automático para seleccionar el número de clases.
+
+La comparación considera los indicadores de ajuste, la separación entre perfiles, el tamaño de las clases y la claridad sustantiva.
+
+Una solución con más clases puede mejorar algunos indicadores estadísticos, pero también puede generar subdivisiones difíciles de interpretar o grupos demasiado pequeños.
+:::
+
+## Solución seleccionada
+
+::: metric
+3 clases
+:::
+
+<br>
+
+**Criterios de selección**
+
+- Ajuste estadístico adecuado.
+- Parsimonia.
+- Tamaños suficientes.
+- Perfiles diferenciados.
+- Interpretación sustantiva clara.
+- Menor riesgo de sobreextraer clases.
+
+::: notes
+La solución seleccionada contiene tres clases.
+
+Esta solución ofrece un equilibrio entre ajuste estadístico y claridad sustantiva.
+
+Una solución con más clases puede separar con mayor detalle algunos extremos, pero no necesariamente agrega una configuración social claramente distinta.
+
+Para el objetivo del taller, tres clases permiten mostrar con claridad una posición protegida, una posición intermedia y una posición de inseguridad elevada.
+:::
+
+## Prevalencia de las clases {.figure-only}
+
+```{r}
+#| out-width: "100%"
+#| echo: false
+
+archivo_lca_prevalencia <- file.path(
+  ruta_figuras_lca,
+  "06_prevalencia_clases.png"
+)
+
+incluir_figura_segura(
+  archivo_lca_prevalencia
+)
+```
+
+::: notes
+Esta figura muestra el tamaño estimado de las tres clases.
+
+Antes de interpretar sus características conviene observar su peso relativo.
+
+Las clases no representan grupos igualmente numerosos.
+
+La prevalencia forma parte de la interpretación sustantiva: un perfil puede ser muy extremo, pero afectar a una proporción relativamente pequeña de la población.
+:::
+
+## Perfiles de las clases {.figure-only}
+
+```{r}
+#| out-width: "100%"
+#| echo: false
+
+archivo_lca_perfiles <- file.path(
+  ruta_figuras_lca,
+  "06_perfiles_clases.png"
+)
+
+incluir_figura_segura(
+  archivo_lca_perfiles
+)
+```
+
+::: notes
+Esta es la figura principal del análisis de clases latentes.
+
+Cada perfil muestra la probabilidad estimada de presentar cada forma de inseguridad económica.
+
+La lectura no debe centrarse solamente en cuál clase tiene los valores más altos.
+
+También debemos observar qué indicadores separan mejor las clases y si las diferencias corresponden solo a intensidad o también a composición.
+:::
+
+## Tres configuraciones de inseguridad
+
+:::::::::::: columns
+::::: {.column width="33%"}
+:::: {.method-card .compact}
+::: method-card-title
+Clase protegida
+:::
+
+Probabilidades comparativamente bajas de inseguridad en los distintos indicadores.
+::::
+:::::
+
+::::: {.column width="33%"}
+:::: {.method-card .compact}
+::: method-card-title
+Clase intermedia
+:::
+
+Combina protección parcial con vulnerabilidad en algunas dimensiones.
+::::
+:::::
+
+::::: {.column width="33%"}
+:::: {.method-card .compact}
+::: method-card-title
+Clase muy insegura
+:::
+
+Probabilidades elevadas de inseguridad en múltiples dimensiones.
+::::
+:::::
+::::::::::::
+
+::: notes
+La primera clase representa una configuración comparativamente protegida.
+
+La segunda ocupa una posición intermedia. No es simplemente una versión reducida de la clase más insegura: puede combinar protección en algunas dimensiones con fragilidad en otras.
+
+La tercera concentra probabilidades altas de inseguridad en varios indicadores.
+
+Los nombres deben entenderse como etiquetas analíticas, no como categorías naturales.
+:::
+
+## Intensidad y composición
+
+:::: callout-box
+::: callout-title
+Las clases se diferencian principalmente en intensidad, pero también pueden mostrar énfasis distintos entre dimensiones.
+:::
+::::
+
+::::: columns
+::: {.column width="50%"}
+### Intensidad
+
+- Acumulación de inseguridades.
+- Distancia general entre perfiles.
+- Gradiente desde protección hacia vulnerabilidad.
+:::
+
+::: {.column width="50%"}
+### Composición
+
+- Presión económica presente.
+- Falta de reservas.
+- Desprotección frente a shocks.
+- Ausencia de apoyo monetario.
+:::
+:::::
+
+::: notes
+La estructura general tiene un componente ordinal importante.
+
+Las clases se ordenan, en gran medida, desde una situación más protegida hacia una situación de inseguridad acumulada.
+
+Sin embargo, la figura de perfiles también permite observar si ciertos indicadores aumentan más rápidamente que otros.
+
+Eso introduce diferencias de composición dentro del gradiente general.
+:::
+
+## Calidad de la clasificación {.figure-only}
+
+```{r}
+#| out-width: "100%"
+#| echo: false
+
+archivo_lca_calidad <- file.path(
+  ruta_figuras_lca,
+  "06_calidad_clasificacion.png"
+)
+
+incluir_figura_segura(
+  archivo_lca_calidad
+)
+```
+
+::: notes
+Las clases latentes son probabilísticas.
+
+Cada persona tiene una probabilidad posterior de pertenecer a cada una de las clases.
+
+La calidad de clasificación indica qué tan claramente el modelo diferencia los perfiles.
+
+Una buena clasificación no significa certeza absoluta, pero reduce la ambigüedad de la asignación modal.
+:::
+
+## La pertenencia es probabilística
+
+:::: callout-box
+::: callout-title
+Una persona no pertenece con certeza absoluta a una clase.
+:::
+::::
+
+<br>
+
+- Cada caso tiene tres probabilidades posteriores.
+- La asignación modal selecciona la probabilidad más alta.
+- Algunos casos están mejor clasificados que otros.
+- Los cruces posteriores deben interpretarse con cautela.
+
+::: notes
+En las figuras siguientes usamos la clase modal para describir la distribución social de los perfiles.
+
+Esta simplificación es útil para comunicar resultados.
+
+Sin embargo, no debemos olvidar que las fronteras entre clases contienen incertidumbre.
+
+Las clases son una representación del patrón de respuestas, no grupos perfectamente separados.
+:::
+
+## Clases según sexo y edad {.figure-only}
+
+```{r}
+#| out-width: "100%"
+#| echo: false
+
+archivo_lca_sexo_edad <- file.path(
+  ruta_figuras_lca,
+  "06_clases_segun_sexo_edad.png"
+)
+
+incluir_figura_segura(
+  archivo_lca_sexo_edad
+)
+```
+
+::: notes
+Esta figura compara la distribución de las clases entre seis grupos definidos conjuntamente por sexo y edad.
+
+El objetivo es observar si la inseguridad económica se distribuye de la misma manera entre hombres y mujeres de distintas etapas de la vida laboral.
+
+Las diferencias son descriptivas y transversales.
+
+No representan trayectorias individuales de envejecimiento ni efectos causales del género o la edad.
+:::
+
+## Clases según ingreso {.figure-only}
+
+```{r}
+#| out-width: "100%"
+#| echo: false
+
+archivo_lca_ingreso <- file.path(
+  ruta_figuras_lca,
+  "06_clases_segun_ingreso.png"
+)
+
+incluir_figura_segura(
+  archivo_lca_ingreso
+)
+```
+
+::: notes
+Esta figura relaciona las clases subjetivas con la posición de ingreso.
+
+Esperamos una asociación clara: las posiciones de menor ingreso deberían concentrar una mayor proporción de la clase insegura.
+
+Sin embargo, la asociación no tiene por qué ser perfecta.
+
+La presencia de varias clases dentro de una misma posición de ingreso muestra que el ingreso corriente no agota la experiencia de seguridad económica.
+:::
+
+## Género y estructura parental {.figure-only}
+
+```{r}
+#| out-width: "100%"
+#| echo: false
+
+archivo_lca_parentalidad <- file.path(
+  ruta_figuras_lca,
+  "06_clases_segun_estructura_parental.png"
+)
+
+incluir_figura_segura(
+  archivo_lca_parentalidad
+)
+```
+
+::: notes
+Esta figura compara configuraciones de inseguridad entre hombres y mujeres que viven en hogares con menores, distinguiendo hogares biparentales y monoparentales.
+
+El interés está en observar la acumulación entre género, responsabilidades familiares y estructura del hogar.
+
+Es una comparación descriptiva y no demuestra que la estructura parental cause la pertenencia a una clase.
+:::
+
+## Qué aporta la LCA
+
+::::: columns
+::: {.column width="50%"}
+### Permite
+
+- Identificar configuraciones de casos.
+- Representar heterogeneidad.
+- Distinguir intensidad y composición.
+- Examinar distribución social de perfiles.
+- Mantener una lógica probabilística.
+:::
+
+::: {.column width="50%"}
+### Depende de
+
+- Indicadores seleccionados.
+- Número de clases.
+- Supuestos del modelo.
+- Calidad de clasificación.
+- Decisiones de etiquetado.
+:::
+:::::
+
+::: notes
+Las clases latentes ayudan a construir una tipología empírica basada en patrones de respuestas.
+
+Su principal ventaja es recuperar configuraciones de dimensiones que suelen analizarse por separado.
+
+Su principal riesgo es reificar las clases y tratarlas como grupos naturales o permanentes.
+:::
+
+## Transición al tercer ejercicio
+
+::::: callout-box
+::: callout-title
+La LCA organiza configuraciones transversales.
+:::
+
+::: callout-title
+Ahora queremos observar permanencia y cambio.
+:::
+:::::
+
+<br>
+
+> ¿Cómo cambian los hogares entre estados de endeudamiento?
+
+::: notes
+Los dos primeros ejercicios son transversales.
+
+Ahora incorporamos el tiempo.
+
+El interés no está solo en cuántos hogares tienen deuda alta en cada año, sino en quiénes permanecen, quiénes entran y quiénes salen de esos estados.
+:::
+
+## Ejercicio 3: transiciones de endeudamiento {.section-divider}
+
+:::::: section-title
+::: eyebrow
+Trayectorias de hogares
+:::
+
+::: section-main-title
+Transiciones de endeudamiento
+:::
+
+::: section-question
+¿Cómo cambian los hogares entre estados de deuda?
+:::
+::::::
+
+::: notes
+Entramos al tercer ejercicio.
+
+Aquí la unidad de análisis es el hogar observado repetidamente.
+
+El objetivo es distinguir composición transversal de movilidad longitudinal.
+:::
+
+## Panel EFH
+
+:::: callout-box
+::: callout-title
+2007 → 2011 → 2014
+:::
+::::
+
+<br>
+
+- Hogares observados en las tres olas.
+- Unidad de análisis: hogar.
+- Estados construidos desde deuda total e ingreso efectivo anual.
+- Transiciones descriptivas del panel analítico.
+
+::: notes
+Trabajar con el mismo hogar permite distinguir cambios reales de composición de cambios entre muestras distintas.
+
+El panel inicial contiene hogares observados en las tres olas.
+
+Para el análisis usamos hogares con información válida de ingreso efectivo y deuda total.
+:::
+
+## Indicador de deuda sobre ingreso
+
+$$RDI =
+\frac{\text{deuda total}}
+{\text{ingreso efectivo mensual} \times 12}$$
+
+::: callout-box
+Un valor igual a 1 indica que la deuda total equivale aproximadamente a un año de ingreso efectivo del hogar.
+:::
+
+::: notes
+El indicador divide el stock total de deuda por el ingreso efectivo anual del hogar.
+
+No debe confundirse con carga financiera mensual.
+
+La carga financiera compara pagos mensuales con ingreso mensual.
+
+Aquí comparamos un stock de deuda con un flujo anual de recursos.
+:::
+
+## Estados de endeudamiento
+
+| Estado           | Regla descriptiva             |
+|------------------|-------------------------------|
+| Sin deuda        | deuda total = 0               |
+| Deuda baja       | hasta 50% del ingreso anual   |
+| Deuda intermedia | 50% a 150% del ingreso anual  |
+| Deuda alta       | más de 150% del ingreso anual |
+
+::: notes
+Para facilitar la lectura transformamos el indicador continuo en cuatro estados.
+
+Los puntos de corte son descriptivos y transparentes.
+
+No representan umbrales oficiales de sobreendeudamiento.
+
+Esta clasificación permite construir matrices de transición y trayectorias fáciles de comunicar.
+:::
+
+## Estados de deuda por ola {.figure-only}
+
+```{r}
+#| out-width: "100%"
+#| echo: false
+
+archivo_panel_estados <- file.path(
+  ruta_figuras_panel,
+  "07_01_estados_deuda_por_ola.png"
+)
+
+incluir_figura_segura(
+  archivo_panel_estados
+)
+```
+
+::: notes
+La primera figura muestra la composición del panel en cada ola.
+
+Podemos observar si aumenta o disminuye la proporción de hogares sin deuda, con deuda baja, intermedia o alta.
+
+Pero una comparación entre barras no informa todavía sobre movilidad individual.
+:::
+
+## Permanencia según estado inicial {.figure-only}
+
+```{r}
+#| out-width: "100%"
+#| echo: false
+
+archivo_panel_permanencia <- file.path(
+  ruta_figuras_panel,
+  "07_03_permanencia_por_origen.png"
+)
+
+incluir_figura_segura(
+  archivo_panel_permanencia
+)
+```
+
+::: notes
+Esta figura responde una pregunta distinta.
+
+Entre quienes comenzaron en cada estado, ¿qué proporción terminó en el mismo estado?
+
+Aquí comenzamos a distinguir prevalencia de estabilidad.
+:::
+
+## Dirección del cambio {.figure-only}
+
+```{r}
+#| out-width: "100%"
+#| echo: false
+
+archivo_panel_direccion <- file.path(
+  ruta_figuras_panel,
+  "07_04_direccion_cambio.png"
+)
+
+incluir_figura_segura(
+  archivo_panel_direccion
+)
+```
+
+::: notes
+Podemos resumir el cambio entre 2007 y 2014 en tres direcciones.
+
+Algunos hogares se desplazan hacia estados de menor deuda relativa.
+
+Otros permanecen.
+
+Otros aumentan su nivel.
+
+Este resumen es útil, pero pierde información sobre los pasos intermedios.
+:::
+
+## Género, pareja y transiciones {.figure-only}
+
+```{r}
+#| out-width: "100%"
+#| echo: false
+
+archivo_panel_genero_pareja <- file.path(
+  ruta_figuras_panel,
+  "07_05_direccion_genero_pareja_2014.png"
+)
+
+incluir_figura_segura(
+  archivo_panel_genero_pareja
+)
+```
+
+::: notes
+La comparación general por género de la persona de referencia muestra
+trayectorias prácticamente idénticas.
+
+Al incorporar la situación de pareja aparece una diferencia más visible entre
+las mujeres.
+
+Los hogares cuya persona de referencia en 2014 era una mujer sin pareja
+presentan una mayor proporción de aumento del nivel relativo de deuda que
+aquellos cuya persona de referencia era una mujer con pareja.
+
+Entre los hombres, las diferencias según situación de pareja son mucho menores.
+
+Esta comparación es descriptiva y debe interpretarse con cautela. El género y
+la situación de pareja de la persona de referencia se observan en 2014, al final
+del periodo analizado, y no constituyen condiciones iniciales ni explicaciones
+causales de la trayectoria.
+:::
+
+## Trayectorias completas {.figure-only}
+
+```{r}
+#| out-width: "100%"
+#| echo: false
+
+archivo_panel_alluvial <- file.path(
+  ruta_figuras_panel,
+  "07_06_trayectorias_alluvial.png"
+)
+
+incluir_figura_segura(
+  archivo_panel_alluvial
+)
+```
+
+::: notes
+El gráfico alluvial recupera las tres observaciones.
+
+Cada bloque representa un estado en una ola.
+
+El ancho de los flujos representa el número de hogares que sigue una trayectoria determinada.
+
+La principal ventaja de esta figura es mostrar simultáneamente composición y movilidad.
+:::
+
+## Qué no explica el panel
+
+:::: callout-box
+::: callout-title
+El panel describe transiciones, pero no identifica por sí solo sus causas.
+:::
+::::
+
+<br>
+
+Posibles procesos detrás de un cambio:
+
+- Cambios de ingreso.
+- Nueva deuda.
+- Pago o refinanciamiento.
+- Desempleo o shock familiar.
+- Compra de vivienda u otro activo.
+
+::: notes
+Observar una transición no equivale a explicar su mecanismo.
+
+Un aumento de la deuda relativa puede provenir de una nueva deuda, de una caída del ingreso o de ambas cosas.
+
+Además, una deuda alta puede corresponder a inversión patrimonial o a presión financiera.
+
+El análisis de transiciones es un punto de partida para estudiar mecanismos, no su demostración.
+:::
+
+## Integración final {.section-divider}
+
+:::::: section-title
+::: eyebrow
+Comparación
+:::
+
+::: section-main-title
+¿Qué aporta cada método?
+:::
+
+::: section-question
+Relaciones, configuraciones y trayectorias como formas complementarias de observar desigualdad.
+:::
+::::::
+
+::: notes
+Entramos al cierre.
+
+La idea no es jerarquizar los métodos, sino comparar qué pregunta permite responder cada uno.
+:::
+
+## Tres unidades de interpretación
+
+| Método | Unidad central       | Resultado                   |
+|--------|----------------------|-----------------------------|
+| ACM    | Categorías           | Espacio multidimensional    |
+| LCA    | Personas             | Clases probabilísticas      |
+| Panel  | Hogares en el tiempo | Transiciones y trayectorias |
+
+::: notes
+Esta diferencia es fundamental.
+
+El ACM organiza categorías.
+
+La LCA organiza probabilísticamente personas según patrones de respuesta.
+
+El panel organiza observaciones repetidas de hogares.
+
+No deberíamos comparar los métodos solo según cuál entrega la figura más atractiva.
+:::
+
+## Tres preguntas distintas
+
+| Método | Pregunta                                         |
+|--------|--------------------------------------------------|
+| ACM    | ¿Qué se relaciona con qué?                       |
+| LCA    | ¿Qué combinaciones aparecen juntas en los casos? |
+| Panel  | ¿Qué permanece y qué cambia?                     |
+
+::: notes
+Los métodos tampoco responden la misma pregunta.
+
+El ACM estudia asociaciones dentro de un espacio.
+
+La LCA estudia patrones recurrentes entre personas.
+
+El panel estudia estabilidad y movilidad.
+
+La elección debe partir de la pregunta sustantiva.
+:::
+
+## Decisiones del investigador
+
+- Variables activas.
+- Indicadores de clase.
+- Número de clases.
+- Puntos de corte.
+- Tratamiento de faltantes.
+- Uso de ponderadores.
+- Etiquetas e interpretación.
+
+::: notes
+Los tres ejercicios incluyen decisiones que no son puramente técnicas.
+
+En el ACM decidimos qué variables construyen el espacio.
+
+En la LCA decidimos indicadores y número de clases.
+
+En el panel decidimos cómo definir estados y qué casos son comparables.
+
+Estas decisiones deben ser explícitas, auditables y justificadas.
+:::
+
+## Objetivo y subjetivo pueden desajustarse
+
+|                         | Seguridad subjetiva      | Inseguridad subjetiva    |
+|-----------------------|------------------------|------------------------|
+| Mejor posición objetiva | Protegidos               | Vulnerables inesperados  |
+| Peor posición objetiva  | Resilientes o protegidos | Vulnerabilidad acumulada |
+
+::: notes
+Una forma de integrar el taller es pensar en desajustes.
+
+La situación más esperable es que mejores posiciones objetivas se relacionen con mayor seguridad y peores posiciones con mayor inseguridad.
+
+Pero también existen casos que no siguen esa alineación.
+
+Esos desajustes pueden ser sustantivamente informativos.
+:::
+
+## Configuraciones y mecanismos
+
+:::: callout-box
+::: callout-title
+Las configuraciones describen patrones. Los mecanismos explican cómo se producen.
+:::
+::::
+
+<br>
+
+- ACM y LCA detectan patrones multidimensionales.
+- El panel observa secuencias temporales.
+- Ninguno identifica automáticamente causalidad.
+
+::: notes
+Conviene distinguir configuraciones de mecanismos.
+
+El ACM y la LCA ayudan a detectar patrones multidimensionales.
+
+El panel permite observar secuencias temporales.
+
+Pero ninguno de estos métodos identifica automáticamente el proceso causal que produjo esos patrones.
+:::
+
+## Qué método elegir
+
+:::::: columns
+::: {.column width="33%"}
+### ACM
+
+Cuando interesa la relación entre categorías.
+:::
+
+::: {.column width="33%"}
+### LCA
+
+Cuando interesan perfiles de casos.
+:::
+
+::: {.column width="33%"}
+### Panel
+
+Cuando interesa permanencia y cambio.
+:::
+::::::
+
+::: notes
+Una regla práctica es comenzar por la unidad que queremos explicar.
+
+Si la pregunta está centrada en cómo se estructura un conjunto de categorías, el ACM puede ser suficiente.
+
+Si buscamos perfiles empíricos entre personas, una aproximación de clases puede ser apropiada.
+
+Si el interés está en cambios, entradas, salidas o persistencia, necesitamos datos longitudinales.
+:::
+
+## Riesgos frecuentes
+
+- Sobreinterpretar distancias.
+- Reificar clases.
+- Confundir transición con causalidad.
+- Ocultar decisiones de construcción.
+- Priorizar la técnica sobre la pregunta.
+
+::: notes
+Cada método tiene una tentación.
+
+En el ACM, interpretar todas las distancias como significativas.
+
+En las clases latentes, hablar de las clases como si fueran grupos naturales.
+
+En el panel, asumir que observar el orden temporal basta para identificar causalidad.
+
+El riesgo compartido es permitir que una salida visual convincente sustituya la reflexión sustantiva.
+:::
+
+## Conclusión principal
+
+:::: callout-box
+::: callout-title
+La desigualdad puede analizarse como posición, experiencia, configuración y trayectoria.
+:::
+::::
+
+<br>
+
+Los métodos no reemplazan las mediciones convencionales. Amplían la mirada y permiten formular preguntas que una variable aislada no puede responder.
+
+::: notes
+La conclusión principal es que la desigualdad no es una sola cosa.
+
+Puede estudiarse como posición en una distribución, como experiencia de seguridad o vulnerabilidad, como combinación de condiciones y como trayectoria de permanencia o cambio.
+
+Los métodos presentados no reemplazan las mediciones convencionales. Permiten ampliar la mirada.
+:::
+
+## Reproducibilidad
+
+::: folder-tree
+Datos/<br> ├── analisis/<br> ├── scripts_taller/<br> ├── outputs/<br> ├── presentacion/<br> └── README.md
+:::
+
+::: notes
+Todo el flujo debe quedar organizado para que los análisis puedan reproducirse.
+
+Los reportes Quarto contienen la versión completa.
+
+Los scripts del taller pueden ser versiones más breves y pedagógicas.
+
+Si los datos no pueden redistribuirse, el repositorio debe documentar cómo obtenerlos y preparar cada análisis.
+:::
+
+## Preguntas de cierre
+
+- ¿Qué tipo de desigualdad queremos observar?
+- ¿Qué unidad necesitamos interpretar?
+- ¿Qué decisiones estamos introduciendo al construir la medida?
+
+::: notes
+Quisiera cerrar con tres preguntas que pueden aplicarse a cualquier análisis.
+
+Primero, qué dimensión de la desigualdad estamos intentando observar.
+
+Segundo, cuál es la unidad que realmente necesitamos interpretar.
+
+Tercero, qué decisiones incorporamos al construir indicadores, perfiles o estados.
+
+Estas preguntas son anteriores a la elección del método.
+:::
+
+## Gracias {.section-divider}
+
+::::: section-title
+::: section-main-title
+Espero que el taller contribuya a nuevas preguntas de investigación
+:::
+
+::: section-question
+Preguntas y discusión
+:::
+:::::
+
+::: notes
+Muchas gracias.
+
+Podemos dedicar el tiempo restante a preguntas, a discutir las decisiones metodológicas o a revisar alguno de los ejercicios con más detalle.
+:::
