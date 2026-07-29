@@ -233,9 +233,9 @@ Tres formas complementarias de estudiar desigualdades multidimensionales
 :::
 ::::
 
-1. Relaciones entre categorías.
-2. Configuraciones recurrentes entre personas.
-3. Trayectorias de hogares a través del tiempo.
+1.  Relaciones entre categorías.
+2.  Configuraciones recurrentes entre personas.
+3.  Trayectorias de hogares a través del tiempo.
 
 ::: notes
 Este taller parte de una inquietud bastante simple.
@@ -540,7 +540,7 @@ En términos relacionales, ambos hogares ocupan posiciones diferentes porque la 
 
 ## El espacio debe construirse
 
-:::::: columns
+::::: columns
 ::: {.column width="52%"}
 ### Decisiones sustantivas
 
@@ -550,7 +550,7 @@ En términos relacionales, ambos hogares ocupan posiciones diferentes porque la 
 - Qué período y contexto analizar.
 :::
 
-:::: {.column width="48%"}
+::: {.column width="48%"}
 ### Decisiones analíticas
 
 - Cómo codificar las variables.
@@ -558,7 +558,7 @@ En términos relacionales, ambos hogares ocupan posiciones diferentes porque la 
 - Qué propiedades se proyectarán después.
 - Qué diferencias serán interpretadas.
 :::
-::::::
+:::::
 
 ::: callout-box
 El espacio social no aparece automáticamente en los datos: depende de la construcción del objeto.
@@ -633,7 +633,7 @@ Estas tres dificultades corresponden a tres maneras distintas de construir y obs
 ## Estrategia del taller
 
 | Ejercicio | Pregunta | Resultado | Unidad interpretativa |
-|---|---|---|---|
+|------------------|------------------|------------------|------------------|
 | ACM | ¿Qué categorías se relacionan? | Espacio multidimensional | Categorías |
 | LCA | ¿Qué configuraciones aparecen? | Clases probabilísticas | Personas |
 | Transiciones | ¿Qué permanece y qué cambia? | Permanencias, cambios y recorridos | Hogares en el tiempo |
@@ -698,6 +698,7 @@ Análisis de correspondencias múltiples
 ::: section-question
 ¿Cómo se ordenan conjuntamente posiciones objetivas y experiencias subjetivas?
 :::
+
 ::::::
 
 ::: notes
@@ -909,10 +910,10 @@ Esto representa una retención de 98,5 por ciento, por lo que la pérdida de cas
 ::: {.column width="52%"}
 ### Cuatro reglas
 
-1. Identificar las categorías que más contribuyen a cada eje.
-2. Comparar proximidades dentro de la nube de categorías.
-3. Interpretar cada eje como una oposición entre polos.
-4. Revisar frecuencias e inercia antes de nombrar dimensiones.
+1.  Identificar las categorías que más contribuyen a cada eje.
+2.  Comparar proximidades dentro de la nube de categorías.
+3.  Interpretar cada eje como una oposición entre polos.
+4.  Revisar frecuencias e inercia antes de nombrar dimensiones.
 :::
 
 :::: {.column width="48%"}
@@ -1087,7 +1088,7 @@ No afirma que el arriendo produzca fragilidad ni que la vivienda cedida produzca
 Identifica combinaciones de modalidades que ocupan posiciones opuestas dentro del espacio.
 :::
 
-## Posiciones sexo-etarias {.figure-only}
+## Posiciones sexo-etarias en el espacio {.figure-only}
 
 ```{r}
 #| out-width: "100%"
@@ -1095,7 +1096,7 @@ Identifica combinaciones de modalidades que ocupan posiciones opuestas dentro de
 
 archivo_acm_sexo_edad <- file.path(
   ruta_figuras_acm,
-  "05_dimension_1_sexo_edad.png"
+  "05_mapa_grupos_sexo_edad.png"
 )
 
 incluir_figura_segura(
@@ -1104,17 +1105,27 @@ incluir_figura_segura(
 ```
 
 ::: notes
-Esta figura presenta las coordenadas medias ponderadas de los seis grupos sexo-etarios sobre la dimensión principal.
+Esta figura proyecta los seis grupos sexo-etarios sobre el plano formado por las dos primeras dimensiones del ACM.
 
-Los hombres de 18 a 29 y de 30 a 44 años aparecen más hacia el polo protegido.
+Las modalidades objetivas y subjetivas construyen el espacio. Los grupos sexo-etarios se incorporan como categorías suplementarias y, por tanto, no intervienen en la orientación de los ejes.
 
-Las mujeres de 30 a 44 y especialmente las mujeres de 45 a 59 años aparecen más hacia el polo vulnerable.
+En términos generales, los seis grupos se encuentran relativamente próximos al centro del espacio. Esto indica que sus perfiles medios son menos diferenciados que las modalidades económicas situadas en los extremos del mapa.
 
-Los hombres de 45 a 59 años también se ubican levemente en el lado vulnerable, pero menos que las mujeres del mismo tramo.
+Aun así, aparecen algunas diferencias descriptivas.
 
-La comparación es transversal. No representa trayectorias individuales de envejecimiento.
+Las mujeres de 45 a 59 años se desplazan más claramente hacia el lado vulnerable de la dimensión 1, en dirección a los ingresos bajos, la educación media y la desprotección económica.
 
-Como estos grupos fueron incorporados como variables suplementarias, sus posiciones ayudan a interpretar el espacio, pero no participaron en la construcción del eje.
+Las mujeres de 30 a 44 años también se sitúan hacia el polo vulnerable y presentan la posición más negativa en la dimensión 2, próxima a la dificultad para llegar a fin de mes y la fragilidad intensa.
+
+Las mujeres de 18 a 29 años ocupan una posición más cercana al centro, aunque todavía levemente orientada hacia el lado vulnerable.
+
+Entre los hombres, los grupos de 18 a 29 y de 45 a 59 años aparecen ligeramente por encima del origen de la dimensión 2.
+
+Los hombres de 30 a 44 años se desplazan algo más hacia el lado protegido de la dimensión 1, pero también hacia el extremo negativo de la segunda dimensión.
+
+La figura no muestra trayectorias de envejecimiento.
+
+Se trata de una comparación transversal entre posiciones medias de grupos distintos. Las diferencias por edad no indican que las mismas personas se desplacen por el espacio a medida que envejecen.
 :::
 
 ## Género y estructura parental {.figure-only}
@@ -1235,7 +1246,6 @@ El método no clasifica inequívocamente a las personas, no estima efectos causa
 
 Su valor está en mostrar conjuntamente estructuras que serían difíciles de reconocer mediante tablas bivariadas separadas.
 :::
-
 
 ## Transición al segundo ejercicio
 
@@ -1401,10 +1411,10 @@ También conviene revisar categorías con pocos casos y mantener una dirección 
 ::: {.column width="52%"}
 ### Secuencia de modelos
 
-1. Estimar una solución de una clase.
-2. Agregar una clase en cada modelo siguiente.
-3. Comparar ajuste, separación y tamaño.
-4. Detenerse cuando nuevas clases aportan poco o generan inestabilidad.
+1.  Estimar una solución de una clase.
+2.  Agregar una clase en cada modelo siguiente.
+3.  Comparar ajuste, separación y tamaño.
+4.  Detenerse cuando nuevas clases aportan poco o generan inestabilidad.
 :::
 
 :::: {.column width="48%"}
@@ -1893,7 +1903,7 @@ Una secuencia es una lista ordenada de estados observados para un mismo caso.
 
 <br>
 
-```text
+``` text
 Sin deuda → Deuda baja → Deuda alta
 ```
 
@@ -2025,27 +2035,27 @@ Esta clasificación permite construir matrices de transición y trayectorias fá
 
 ## Orden y duración
 
-:::::: columns
+::::: columns
 ::: {.column width="52%"}
 ### Secuencia observada
 
-```text
+``` text
 Sin deuda → Sin deuda → Deuda alta
 ```
 
 Conserva la permanencia inicial y el momento del cambio.
 :::
 
-:::: {.column width="48%"}
+::: {.column width="48%"}
 ### Resumen del cambio
 
-```text
+``` text
 Sin deuda → Deuda alta
 ```
 
 Conserva la dirección, pero pierde el paso intermedio.
 :::
-::::::
+:::::
 
 ::: notes
 Las observaciones repetidas contienen información sobre orden y permanencia.
@@ -2182,7 +2192,7 @@ No permite distinguir, por ejemplo, entre un hogar que aumentó continuamente y 
 ::: {.column width="50%"}
 ### Cambio gradual
 
-```text
+``` text
 Sin deuda → Deuda baja → Deuda intermedia
 ```
 
@@ -2192,7 +2202,7 @@ Movimiento entre estados próximos.
 ::: {.column width="50%"}
 ### Salto
 
-```text
+``` text
 Sin deuda → Deuda alta
 ```
 
@@ -2486,10 +2496,10 @@ Estas decisiones deben ser explícitas, auditables y justificadas.
 
 ## Objetivo y subjetivo pueden desajustarse
 
-|                          | Seguridad subjetiva       | Inseguridad subjetiva     |
-|--------------------------|---------------------------|---------------------------|
-| Mejor posición objetiva  | Protegidos                | Vulnerables inesperados   |
-| Peor posición objetiva   | Resilientes o protegidos  | Vulnerabilidad acumulada  |
+|                         | Seguridad subjetiva      | Inseguridad subjetiva    |
+|------------------------|------------------------|------------------------|
+| Mejor posición objetiva | Protegidos               | Vulnerables inesperados  |
+| Peor posición objetiva  | Resilientes o protegidos | Vulnerabilidad acumulada |
 
 ::: notes
 Una forma de integrar el taller es pensar en desajustes.
@@ -2605,7 +2615,7 @@ Permiten ampliar la mirada y reconocer estructuras que una variable aislada no p
 
 ## Literatura sugerida
 
-::::: columns
+:::::: columns
 ::: {.column width="33%"}
 ### ACM
 
@@ -2629,7 +2639,7 @@ Permiten ampliar la mirada y reconocer estructuras que una variable aislada no p
 - Ritschard y Studer
 - Gabadinho et al.
 :::
-:::::
+::::::
 
 ::: notes
 Estas referencias ofrecen rutas de profundización para cada técnica.
@@ -2698,33 +2708,25 @@ Podemos dedicar el tiempo restante a preguntas, a discutir las decisiones metodo
 
 ## Referencias bibliográficas
 
-::::: columns
-::: {.column width="50%"}
-
-<div class="referencias-taller">
-
+::::::: columns
+:::: {.column width="50%"}
+::: referencias-taller
 Blasius, J., Lebaron, F., Le Roux, B., & Schmitz, A. (Eds.). (2019). *Empirical investigations of social space*. Springer International Publishing.
 
 Cornwell, B. (2015). *Social sequence analysis: Methods and applications*. Cambridge University Press. https://doi.org/10.1017/CBO9781316212530
 
 Hjellbrekke, J. (2019). *Multiple correspondence analysis for the social sciences*. Routledge.
-
-</div>
-
 :::
+::::
 
-::: {.column width="50%"}
-
-<div class="referencias-taller">
-
+:::: {.column width="50%"}
+::: referencias-taller
 Le Roux, B., & Rouanet, H. (2009). *Multiple correspondence analysis*. SAGE Publications.
 
 Weller, B. E., Bowen, N. K., & Faubert, S. J. (2020). Latent class analysis: A guide to best practice. *Journal of Black Psychology, 46*(4), 287–311. https://doi.org/10.1177/0095798420930932
-
-</div>
-
 :::
-:::::
+::::
+:::::::
 
 ::: notes
 Estas referencias ofrecen una ruta de profundización para los principales conceptos y métodos del taller.
