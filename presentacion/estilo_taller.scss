@@ -1265,4 +1265,16 @@ Estas reglas requieren que los encabezados del QMD tengan:
   .reveal section.figure-only img {
     max-height: 680px;
   }
+  
+  .referencias-taller {
+  font-size: 0.69em;
+  line-height: 1.35;
+}
+
+.referencias-taller p {
+  margin-top: 0;
+  margin-bottom: 1.05em;
+  padding-left: 1.4em;
+  text-indent: -1.4em;
+}
 }
